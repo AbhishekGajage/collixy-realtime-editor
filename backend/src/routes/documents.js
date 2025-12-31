@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const {
   createDocument,
-  getUserDocuments,
+  getDocuments,
   getDocument,
   updateDocument,
   deleteDocument,
@@ -11,56 +11,146 @@ const {
   removeCollaborator,
   updateCollaboratorRole,
   getDocumentHistory,
-  restoreDocumentVersion
+  restoreDocumentVersion,
+  getPublicDocuments,
+  duplicateDocument,
+  exportDocument,
+  importDocument
 } = require('../controllers/documentController');
 const { protect } = require('../middleware/auth');
-const { apiLimiter } = require('../middleware/rateLimiter');
 
-// Apply rate limiting and authentication to all routes
-router.use(apiLimiter);
+// Validation rules
+const createDocumentValidation = [
+  body('title')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('Title cannot exceed 100 characters'),
+  body('description')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Description cannot exceed 500 characters'),
+  body('language')
+    .optional()
+    .isIn([
+      'javascript', 'typescript', 'python', 'java', 'cpp', 'c', 'csharp',
+      'go', 'rust', 'php', 'ruby', 'swift', 'kotlin', 'scala',
+      'html', 'css', 'scss', 'less', 'json', 'xml', 'yaml',
+      'markdown', 'sql', 'graphql', 'shell', 'dockerfile', 'makefile'
+    ])
+    .withMessage('Invalid language'),
+  body('isPublic')
+    .optional()
+    .isBoolean()
+    .withMessage('isPublic must be boolean'),
+  body('settings')
+    .optional()
+    .isObject()
+    .withMessage('Settings must be an object'),
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Tags must be an array')
+];
+
+const updateDocumentValidation = [
+  param('id').isMongoId().withMessage('Invalid document ID'),
+  body('title')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('Title cannot exceed 100 characters'),
+  body('description')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Description cannot exceed 500 characters'),
+  body('language')
+    .optional()
+    .isIn([
+      'javascript', 'typescript', 'python', 'java', 'cpp', 'c', 'csharp',
+      'go', 'rust', 'php', 'ruby', 'swift', 'kotlin', 'scala',
+      'html', 'css', 'scss', 'less', 'json', 'xml', 'yaml',
+      'markdown', 'sql', 'graphql', 'shell', 'dockerfile', 'makefile'
+    ])
+    .withMessage('Invalid language'),
+  body('content').optional().isString(),
+  body('isPublic')
+    .optional()
+    .isBoolean()
+    .withMessage('isPublic must be boolean'),
+  body('settings')
+    .optional()
+    .isObject()
+    .withMessage('Settings must be an object'),
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Tags must be an array')
+];
+
+const collaboratorValidation = [
+  param('id').isMongoId().withMessage('Invalid document ID'),
+  body('userId')
+    .isMongoId()
+    .withMessage('Invalid user ID'),
+  body('role')
+    .optional()
+    .isIn(['viewer', 'editor', 'admin'])
+    .withMessage('Role must be viewer, editor, or admin')
+];
+
+// Apply authentication to all routes
 router.use(protect);
 
 // Document CRUD routes
 router.route('/')
-  .get(getUserDocuments)
-  .post(
+  .get(
     [
-      body('title').optional().isLength({ max: 100 }),
-      body('language').optional().isIn(['javascript', 'python', 'java', 'cpp', 'html', 'css', 'typescript', 'json', 'markdown', 'php', 'ruby', 'go', 'rust', 'swift', 'kotlin']),
-      body('isPublic').optional().isBoolean()
+      query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+      query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50'),
+      query('search').optional().isString(),
+      query('sort').optional().isIn(['title', 'createdAt', 'updatedAt', 'language']),
+      query('order').optional().isIn(['asc', 'desc']),
+      query('language').optional().isString()
     ],
-    createDocument
-  );
+    getDocuments
+  )
+  .post(createDocumentValidation, createDocument);
 
+// Document-specific routes
 router.route('/:id')
   .get(
     param('id').isMongoId().withMessage('Invalid document ID'),
     getDocument
   )
-  .put(
-    [
-      param('id').isMongoId().withMessage('Invalid document ID'),
-      body('title').optional().isLength({ max: 100 }),
-      body('language').optional().isIn(['javascript', 'python', 'java', 'cpp', 'html', 'css', 'typescript', 'json', 'markdown', 'php', 'ruby', 'go', 'rust', 'swift', 'kotlin']),
-      body('isPublic').optional().isBoolean()
-    ],
-    updateDocument
-  )
+  .put(updateDocumentValidation, updateDocument)
   .delete(
     param('id').isMongoId().withMessage('Invalid document ID'),
     deleteDocument
   );
 
-// Collaborator management routes
+// Document operations
+router.post('/:id/duplicate',
+  param('id').isMongoId().withMessage('Invalid document ID'),
+  duplicateDocument
+);
+
+router.get('/:id/export',
+  param('id').isMongoId().withMessage('Invalid document ID'),
+  exportDocument
+);
+
+router.post('/import',
+  [
+    body('title').optional().isLength({ max: 100 }),
+    body('language').optional().isString(),
+    body('content').isString().withMessage('Content is required'),
+    body('fileName').optional().isString()
+  ],
+  importDocument
+);
+
+// Collaborator management routes (from design - team collaboration)
 router.route('/:id/collaborators')
-  .post(
-    [
-      param('id').isMongoId().withMessage('Invalid document ID'),
-      body('userId').isMongoId().withMessage('Invalid user ID'),
-      body('role').optional().isIn(['viewer', 'editor', 'admin'])
-    ],
-    addCollaborator
-  );
+  .post(collaboratorValidation, addCollaborator);
 
 router.route('/:id/collaborators/:userId')
   .delete(
@@ -79,7 +169,7 @@ router.route('/:id/collaborators/:userId')
     updateCollaboratorRole
   );
 
-// Document history routes
+// Document history (version control)
 router.get('/:id/history',
   param('id').isMongoId().withMessage('Invalid document ID'),
   getDocumentHistory
