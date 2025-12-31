@@ -45,7 +45,7 @@ exports.createDocument = async (req, res, next) => {
 // @desc    Get all user documents with pagination
 // @route   GET /api/documents
 // @access  Private
-exports.getUserDocuments = async (req, res, next) => {
+exports.getDocuments = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -555,6 +555,207 @@ exports.restoreDocumentVersion = async (req, res, next) => {
         version: document.version,
         lastModified: document.lastModified
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Duplicate a document
+// @route   POST /api/documents/:id/duplicate
+// @access  Private
+exports.duplicateDocument = async (req, res, next) => {
+  try {
+    const original = await Document.findById(req.params.id);
+    
+    if (!original) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found'
+      });
+    }
+
+    // Check permissions
+    const canAccess = 
+      original.owner.toString() === req.user.id ||
+      original.collaborators.some(c => c.user.toString() === req.user.id) ||
+      original.isPublic;
+
+    if (!canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to duplicate this document'
+      });
+    }
+
+    // Generate new room ID
+    const roomId = uuidv4().replace(/-/g, '').substring(0, 12);
+
+    const duplicate = await Document.create({
+      title: `Copy of ${original.title}`,
+      description: original.description,
+      language: original.language,
+      content: original.content,
+      owner: req.user.id,
+      isPublic: false,
+      roomId,
+      collaborators: [{
+        user: req.user.id,
+        role: 'admin'
+      }],
+      settings: original.settings,
+      tags: original.tags,
+      version: 1
+    });
+
+    // Update user's documents array
+    await User.findByIdAndUpdate(
+      req.user.id,
+      { $push: { documents: duplicate._id } }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Document duplicated successfully',
+      document: duplicate
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export document
+// @route   GET /api/documents/:id/export
+// @access  Private
+exports.exportDocument = async (req, res, next) => {
+  try {
+    const document = await Document.findById(req.params.id);
+
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found'
+      });
+    }
+
+    // Check permissions
+    const canAccess = 
+      document.owner.toString() === req.user.id ||
+      document.collaborators.some(c => c.user.toString() === req.user.id) ||
+      document.isPublic;
+
+    if (!canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to export this document'
+      });
+    }
+
+    res.json({
+      success: true,
+      document: {
+        title: document.title,
+        language: document.language,
+        content: document.content,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt,
+        metadata: {
+          version: document.version,
+          settings: document.settings
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Import document
+// @route   POST /api/documents/import
+// @access  Private
+exports.importDocument = async (req, res, next) => {
+  try {
+    const { title, language, content, fileName } = req.body;
+    
+    // Generate unique room ID
+    const roomId = uuidv4().replace(/-/g, '').substring(0, 12);
+
+    const document = await Document.create({
+      title: title || fileName || 'Imported Document',
+      language: language || 'javascript',
+      content: content || '',
+      owner: req.user.id,
+      isPublic: false,
+      roomId,
+      collaborators: [{
+        user: req.user.id,
+        role: 'admin'
+      }],
+      settings: {},
+      version: 1
+    });
+
+    // Update user's documents array
+    await User.findByIdAndUpdate(
+      req.user.id,
+      { $push: { documents: document._id } }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Document imported successfully',
+      document
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get public documents
+// @route   GET /api/documents/public
+// @access  Public
+exports.getPublicDocuments = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const search = req.query.search || '';
+    const language = req.query.language || '';
+    const sortBy = req.query.sortBy || '-updatedAt';
+
+    // Build query
+    const query = { isPublic: true };
+
+    // Add search if provided
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Filter by language if provided
+    if (language) {
+      query.language = language;
+    }
+
+    const documents = await Document.find(query)
+      .populate('owner', 'username email avatar')
+      .sort(sortBy)
+      .skip(skip)
+      .limit(limit)
+      .select('-content'); // Don't include full content in list
+
+    const total = await Document.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
+
+    res.json({
+      success: true,
+      count: documents.length,
+      total,
+      totalPages,
+      currentPage: page,
+      documents
     });
   } catch (error) {
     next(error);

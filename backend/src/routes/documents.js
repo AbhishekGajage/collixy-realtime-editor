@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { body, param, query } = require('express-validator');
+const { body, param, query, validationResult } = require('express-validator');
 const {
   createDocument,
   getDocuments,
@@ -18,6 +18,20 @@ const {
   importDocument
 } = require('../controllers/documentController');
 const { protect } = require('../middleware/auth');
+
+// Create a validation middleware function
+const validate = (validations) => {
+  return async (req, res, next) => {
+    await Promise.all(validations.map(validation => validation.run(req)));
+
+    const errors = validationResult(req);
+    if (errors.isEmpty()) {
+      return next();
+    }
+
+    res.status(400).json({ errors: errors.array() });
+  };
+};
 
 // Validation rules
 const createDocumentValidation = [
@@ -103,84 +117,106 @@ router.use(protect);
 // Document CRUD routes
 router.route('/')
   .get(
-    [
+    validate([
       query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
       query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50'),
       query('search').optional().isString(),
       query('sort').optional().isIn(['title', 'createdAt', 'updatedAt', 'language']),
       query('order').optional().isIn(['asc', 'desc']),
       query('language').optional().isString()
-    ],
+    ]),
     getDocuments
   )
-  .post(createDocumentValidation, createDocument);
+  .post(
+    validate(createDocumentValidation),
+    createDocument
+  );
 
 // Document-specific routes
 router.route('/:id')
   .get(
-    param('id').isMongoId().withMessage('Invalid document ID'),
+    validate([param('id').isMongoId().withMessage('Invalid document ID')]),
     getDocument
   )
-  .put(updateDocumentValidation, updateDocument)
+  .put(
+    validate(updateDocumentValidation),
+    updateDocument
+  )
   .delete(
-    param('id').isMongoId().withMessage('Invalid document ID'),
+    validate([param('id').isMongoId().withMessage('Invalid document ID')]),
     deleteDocument
   );
 
 // Document operations
 router.post('/:id/duplicate',
-  param('id').isMongoId().withMessage('Invalid document ID'),
+  validate([param('id').isMongoId().withMessage('Invalid document ID')]),
   duplicateDocument
 );
 
 router.get('/:id/export',
-  param('id').isMongoId().withMessage('Invalid document ID'),
+  validate([param('id').isMongoId().withMessage('Invalid document ID')]),
   exportDocument
 );
 
 router.post('/import',
-  [
+  validate([
     body('title').optional().isLength({ max: 100 }),
     body('language').optional().isString(),
     body('content').isString().withMessage('Content is required'),
     body('fileName').optional().isString()
-  ],
+  ]),
   importDocument
 );
 
 // Collaborator management routes (from design - team collaboration)
 router.route('/:id/collaborators')
-  .post(collaboratorValidation, addCollaborator);
+  .post(
+    validate(collaboratorValidation),
+    addCollaborator
+  );
 
 router.route('/:id/collaborators/:userId')
   .delete(
-    [
+    validate([
       param('id').isMongoId().withMessage('Invalid document ID'),
       param('userId').isMongoId().withMessage('Invalid user ID')
-    ],
+    ]),
     removeCollaborator
   )
   .put(
-    [
+    validate([
       param('id').isMongoId().withMessage('Invalid document ID'),
       param('userId').isMongoId().withMessage('Invalid user ID'),
       body('role').isIn(['viewer', 'editor', 'admin']).withMessage('Invalid role')
-    ],
+    ]),
     updateCollaboratorRole
   );
 
 // Document history (version control)
 router.get('/:id/history',
-  param('id').isMongoId().withMessage('Invalid document ID'),
+  validate([param('id').isMongoId().withMessage('Invalid document ID')]),
   getDocumentHistory
 );
 
 router.post('/:id/restore/:version',
-  [
+  validate([
     param('id').isMongoId().withMessage('Invalid document ID'),
     param('version').isInt({ min: 1 }).withMessage('Invalid version number')
-  ],
+  ]),
   restoreDocumentVersion
+);
+
+// Public documents route (make sure getPublicDocuments is NOT wrapped with protect)
+router.get('/public',
+  validate([
+    query('page').optional().isInt({ min: 1 }),
+    query('limit').optional().isInt({ min: 1, max: 50 }),
+    query('search').optional().isString(),
+    query('language').optional().isString(),
+    query('sort').optional().isIn(['title', 'createdAt', 'language']),
+    query('order').optional().isIn(['asc', 'desc'])
+  ]),
+  getPublicDocuments
 );
 
 module.exports = router;
