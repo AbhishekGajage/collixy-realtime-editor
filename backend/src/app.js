@@ -140,12 +140,20 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../frontend/build')));
   
   app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../../frontend/build/index.html'));
+    // Only serve the frontend for non-API routes
+    if (!req.path.startsWith('/api/')) {
+      res.sendFile(path.resolve(__dirname, '../../frontend/build/index.html'));
+    } else {
+      res.status(404).json({
+        success: false,
+        message: `API route ${req.originalUrl} not found`
+      });
+    }
   });
 }
 
-// 404 handler
-app.use('*', (req, res) => {
+// 404 handler - FIXED: Remove the '*' pattern
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} not found`,
