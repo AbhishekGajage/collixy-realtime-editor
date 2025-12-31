@@ -1,0 +1,109 @@
+# ============================================
+# 🚨 ENVIRONMENT FILES - DO NOT COMMIT!
+# ============================================
+.env
+.env.*
+!.env.example
+*.env
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+
+# ============================================
+# 📦 NODE MODULES & DEPENDENCIES
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
+
+# Project-specific node_modules
+backend/node_modules/
+frontend/node_modules/
+
+# Lock files (keep package-lock.json in root, but not in node_modules/)
+**/node_modules/.package-lock.json
+
+# ============================================
+# 🏗️ BUILD OUTPUTS
+# ============================================
+dist/
+build/
+.next/
+out/
+public/build/
+
+# Production
+*.prod.js
+*.prod.js.map
+
+# ============================================
+# 📊 COVERAGE & TESTING
+# ============================================
+coverage/
+.nyc_output/
+*.lcov
+
+# ============================================
+# 💻 IDE & EDITOR
+# ============================================
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+
+# ============================================
+# 🔐 SECURITY & SENSITIVE
+# ============================================
+*.pem
+*.key
+*.crt
+*.cert
+secrets/
+credentials/
+
+# ============================================
+# 🗄️ DATABASE & LOGS
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+
+# ============================================
+# 🖼️ OS & MISC
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ============================================
+# 🚀 PROJECT-SPECIFIC
+# ============================================
+# Add any project-specific ignores below
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+
+# Cache directories
+.cache/
+.turbo/
