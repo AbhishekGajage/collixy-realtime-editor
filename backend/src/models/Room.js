@@ -6,7 +6,7 @@ const roomSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    index: true
+    // index: true // Not needed when unique: true is present
   },
   
   // Associated document
@@ -151,26 +151,24 @@ const roomSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-    index: true
+    index: true // This creates an ascending index automatically
   },
   
   // Expiry for temporary rooms
   expiresAt: {
     type: Date,
-    index: true,
+    index: true, // This creates an index automatically
     expires: 0 // Auto-delete after expiresAt
   }
 }, {
   timestamps: true
 });
 
-// Indexes
-roomSchema.index({ roomId: 1 }, { unique: true });
+// Indexes - REMOVED DUPLICATES
+// Keep only indexes that aren't already defined in field definitions
 roomSchema.index({ documentId: 1 });
 roomSchema.index({ 'activeUsers.userId': 1 });
-roomSchema.index({ createdAt: -1 });
-roomSchema.index({ lastActivity: -1 });
-roomSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+roomSchema.index({ lastActivity: -1 }); // Keep this - it's a descending index
 
 // Pre-save middleware
 roomSchema.pre('save', function(next) {

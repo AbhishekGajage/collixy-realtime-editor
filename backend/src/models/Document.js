@@ -38,7 +38,7 @@ const documentSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true,
-    index: true
+    index: true // This creates the index automatically
   },
   
   // Collaboration settings
@@ -255,12 +255,11 @@ const documentSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtuals
+// Virtuals - FIXED: removed duplicate foreignField
 documentSchema.virtual('activeCollaborators', {
   ref: 'Room',
   localField: 'roomId',
-  foreignField: 'roomId',
-  foreignField: 'activeUsers',
+  foreignField: 'roomId', // Fixed: only one foreignField
   justOne: false
 });
 
@@ -268,12 +267,12 @@ documentSchema.virtual('isExpired').get(function() {
   return this.expiresAt && this.expiresAt < new Date();
 });
 
-// Indexes
+// Indexes - REMOVED DUPLICATE roomId index
 documentSchema.index({ owner: 1, createdAt: -1 });
 documentSchema.index({ 'collaborators.user': 1 });
 documentSchema.index({ isPublic: 1 });
 documentSchema.index({ tags: 1 });
-documentSchema.index({ roomId: 1 }, { unique: true, sparse: true });
+// documentSchema.index({ roomId: 1 }, { unique: true, sparse: true }); // REMOVE - already has index: true
 documentSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 documentSchema.index({ title: 'text', description: 'text', content: 'text' });
 

@@ -7,14 +7,20 @@ const connectDB = async () => {
         ? process.env.MONGODB_TEST_URI 
         : process.env.MONGODB_URI,
       {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+        // REMOVE THESE DEPRECATED OPTIONS:
+        // useNewUrlParser: true,      // ❌ REMOVE - no longer needed in Mongoose 6+
+        // useUnifiedTopology: true,   // ❌ REMOVE - no longer needed in Mongoose 6+
+        
+        // KEEP THESE OPTIONS:
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
         maxPoolSize: 10,
         minPoolSize: 5,
         retryWrites: true,
         w: 'majority'
+        
+        // You can also add these if needed:
+        // family: 4, // Use IPv4, skip trying IPv6
       }
     );
     

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
   username: {
@@ -169,11 +170,14 @@ userSchema.virtual('displayName').get(function() {
   return this.username;
 });
 
-// Indexes
-userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ username: 1 }, { unique: true });
-userSchema.index({ googleId: 1 }, { sparse: true });
-userSchema.index({ githubId: 1 }, { sparse: true });
+// Indexes - ONLY KEEP NON-DUPLICATE INDEXES
+// These fields already have indexes from unique: true and sparse: true:
+// - email (unique: true)
+// - username (unique: true) 
+// - googleId (unique: true, sparse: true)
+// - githubId (unique: true, sparse: true)
+
+// Only define indexes NOT already created by field definitions:
 userSchema.index({ 'collaboratingOn.document': 1 });
 userSchema.index({ lastActive: -1 });
 
