@@ -1,0 +1,283 @@
+/* src/components/auth/Auth.css */
+.auth-layout {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 440px;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.auth-logo {
+  font-size: 32px;
+  font-weight: bold;
+  color: white;
+  text-decoration: none;
+  display: block;
+}
+
+.auth-logo span {
+  display: block;
+  font-size: 14px;
+  font-weight: normal;
+  margin-top: 4px;
+  opacity: 0.9;
+}
+
+.auth-card {
+  background: var(--bg-color);
+  border-radius: 12px;
+  padding: 40px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+}
+
+.auth-header-text {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.auth-header-text h2 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.auth-subtitle {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.google-btn {
+  width: 100%;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  background: white;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+
+.google-icon {
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.divider {
+  text-align: center;
+  position: relative;
+  margin: 24px 0;
+  color: #9ca3af;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 45%;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.divider::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 45%;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.auth-form {
+  margin-top: 24px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.auth-submit-btn {
+  width: 100%;
+  background: var(--primary-color);
+  color: white;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.auth-submit-btn:hover {
+  background: var(--secondary-color);
+}
+
+.auth-switch {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.switch-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.switch-link:hover {
+  text-decoration: underline;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 30px;
+  color: white;
+  opacity: 0.8;
+}
+
+/* src/components/common/Navbar.css */
+.navbar {
+  background: var(--bg-color);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.navbar-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 70px;
+}
+
+.navbar-brand {
+  text-decoration: none;
+}
+
+.logo h1 {
+  font-size: 24px;
+  color: var(--primary-color);
+  margin: 0;
+}
+
+.logo span {
+  font-size: 12px;
+  color: var(--secondary-color);
+  font-weight: 500;
+}
+
+.navbar-menu {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: var(--text-color);
+  font-size: 16px;
+  background: none;
+  border: none;
+}
+
+.nav-link:hover {
+  color: var(--primary-color);
+}
+
+.nav-btn {
+  background: transparent;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.get-started-btn {
+  background: var(--primary-color);
+  color: white;
+  padding: 8px 20px;
+}
+
+.user-dropdown {
+  position: relative;
+}
+
+.user-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+.user-name {
+  font-size: 14px;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 180px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: none;
+}
+
+.user-dropdown:hover .dropdown-menu {
+  display: block;
+}
+
+.dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+}
+
+.dropdown-item:hover {
+  background: var(--card-bg);
+}
+
+/* Add the rest of the CSS files similarly */
+/* Due to character limit, I'll provide the most essential CSS */
