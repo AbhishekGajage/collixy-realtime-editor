@@ -96,3 +96,42 @@ input:focus, select:focus, textarea:focus {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-color);
 }
+/* Add these to existing App.css */
+
+/* Theme Transition */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Loading States */
+.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Button States */
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Form Validation */
+input:invalid {
+  border-color: var(--error-color);
+}
+
+/* Focus States */
+:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Print Styles */
+@media print {
+  .navbar,
+  .footer,
+  button {
+    display: none;
+  }
+}

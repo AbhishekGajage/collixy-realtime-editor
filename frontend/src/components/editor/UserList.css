@@ -1,0 +1,232 @@
+/* src/components/editor/UserList.css */
+.user-list {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-color);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.room-info,
+.collaborators-section,
+.room-actions {
+  padding: 24px;
+}
+
+.room-info {
+  border-bottom: 1px solid var(--border-color);
+  background: var(--card-bg);
+}
+
+.room-info h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.room-id-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.room-id-display code {
+  flex: 1;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  color: var(--primary-color);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.copy-btn {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 16px;
+}
+
+.copy-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.collaborators-section {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.collaborators-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.user-list-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--card-bg);
+  transition: all 0.3s;
+}
+
+.user-item:hover {
+  transform: translateX(4px);
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+}
+
+.user-avatar-container {
+  position: relative;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.current-user {
+  background: linear-gradient(135deg, #10b981, #34d399);
+}
+
+.status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-color);
+}
+
+.status-dot.online {
+  background: #10b981;
+}
+
+.status-dot.offline {
+  background: #9ca3af;
+}
+
+.user-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-name {
+  font-weight: 600;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.you-badge {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--primary-color);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.user-email {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.room-actions {
+  border-top: 1px solid var(--border-color);
+  background: var(--card-bg);
+}
+
+.room-actions h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.room-action-btn {
+  width: 100%;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 12px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-action-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+  transform: translateX(4px);
+}
+
+/* Scrollbar for user list */
+.collaborators-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.collaborators-section::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.collaborators-section::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.collaborators-section::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-color);
+}

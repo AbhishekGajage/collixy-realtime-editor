@@ -1,0 +1,80 @@
+/* src/components/common/FeatureCard.css */
+.feature-card {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 32px 24px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  transform: scaleX(0);
+  transition: transform 0.4s;
+}
+
+.feature-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary-color);
+}
+
+.feature-card:hover::before {
+  transform: scaleX(1);
+}
+
+.feature-icon {
+  font-size: 40px;
+  margin-bottom: 20px;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(59, 130, 246, 0.1));
+  border-radius: 12px;
+  color: var(--primary-color);
+}
+
+.feature-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--text-color);
+  line-height: 1.4;
+}
+
+.feature-description {
+  color: #6b7280;
+  font-size: 15px;
+  line-height: 1.6;
+  flex-grow: 1;
+}
+
+@media (max-width: 768px) {
+  .feature-card {
+    padding: 24px 20px;
+  }
+  
+  .feature-icon {
+    font-size: 32px;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 16px;
+  }
+  
+  .feature-title {
+    font-size: 18px;
+  }
+}
