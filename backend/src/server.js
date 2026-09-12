@@ -21,6 +21,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const ACTIONS = require("./utils/Actions");
 const app = express();
+app.set("trust proxy", 1);
 
 // Helper to validate allowed CORS origins
 function isOriginAllowed(origin) {

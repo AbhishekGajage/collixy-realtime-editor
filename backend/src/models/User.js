@@ -197,8 +197,6 @@ userSchema.virtual('displayName').get(function() {
 // Indexes
 userSchema.index({ 'collaboratingOn.document': 1 });
 userSchema.index({ lastActive: -1 });
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
 
 // ========== MIDDLEWARE - FIXED VERSION ==========
 
