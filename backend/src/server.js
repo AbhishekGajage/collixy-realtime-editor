@@ -1,6 +1,15 @@
 // backend/src/server.js - COMPLETE FIXED VERSION WITH GOOGLE AUTH
 
 require("dotenv").config();
+
+// Normalize environment URLs (strip trailing slashes)
+if (process.env.FRONTEND_URL) {
+  process.env.FRONTEND_URL = process.env.FRONTEND_URL.replace(/\/+$/, "");
+}
+if (process.env.BACKEND_URL) {
+  process.env.BACKEND_URL = process.env.BACKEND_URL.replace(/\/+$/, "");
+}
+
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -13,27 +22,39 @@ const { Server } = require("socket.io");
 const ACTIONS = require("./utils/Actions");
 const app = express();
 
+// Helper to validate allowed CORS origins
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  const normalizedOrigin = origin.replace(/\/+$/, "");
+
+  const envOrigins = (process.env.FRONTEND_URL || "")
+    .split(",")
+    .map((url) => url.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+
+  const allowedOrigins = [
+    ...envOrigins,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+  ];
+
+  if (process.env.NODE_ENV === "development") return true;
+  if (allowedOrigins.includes(normalizedOrigin)) return true;
+  if (normalizedOrigin.endsWith(".onrender.com")) return true;
+
+  return false;
+}
+
 // ========== SOCKET.IO SETUP ==========
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      const allowedOrigins = [
-        process.env.FRONTEND_URL || "http://localhost:5173",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-      ];
-
-      if (
-        allowedOrigins.indexOf(origin) !== -1 ||
-        process.env.NODE_ENV === "development"
-      ) {
+      if (isOriginAllowed(origin)) {
         callback(null, true);
       } else {
         console.log("⚠️ Socket.io CORS blocked origin:", origin);
@@ -683,22 +704,7 @@ app.use(morgan("dev"));
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-
-    const allowedOrigins = [
-      process.env.FRONTEND_URL || "http://localhost:5173",
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      "http://localhost:5174",
-      "http://127.0.0.1:5174",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-    ];
-
-    if (
-      allowedOrigins.indexOf(origin) !== -1 ||
-      process.env.NODE_ENV === "development"
-    ) {
+    if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
       console.log("⚠️ CORS blocked origin:", origin);
@@ -1016,11 +1022,11 @@ app.use((err, req, res, next) => {
 // ========== START SERVER ==========
 const PORT = process.env.PORT || 5001;
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`
 🚀 Server running in ${process.env.NODE_ENV || "development"} mode
-🌐 HTTP Server: http://localhost:${PORT}
-🔌 WebSocket Server: ws://localhost:${PORT}
+🌐 HTTP Server: http://0.0.0.0:${PORT}
+🔌 WebSocket Server: ws://0.0.0.0:${PORT}
 🔗 Frontend URL: ${process.env.FRONTEND_URL || "http://localhost:5173"}
 👥 Socket.io: Ready for real-time collaboration
 

@@ -2,8 +2,8 @@
 import axios from 'axios';
 import { LANGUAGE_VERSIONS } from "../utils/constants";
 
-// Use consistent backend URL - FIXED: Changed from 5080 to 5000
-const API_BASE_URL = 'http://127.0.0.1:5001';
+// Backend base URL: configured via environment variable with fallback
+const API_BASE_URL = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5001').replace(/\/+$/, '');
 
 // Create axios instance with default config
 const api = axios.create({
@@ -100,8 +100,6 @@ export const testBackendConnection = async () => {
     const endpoints = [
       `${API_BASE_URL}/api/health`,
       `${API_BASE_URL}/api/test`,
-      'http://localhost:5001/api/health',
-      'http://127.0.0.1:5001/api/health'
     ];
     
     for (const endpoint of endpoints) {
@@ -125,7 +123,7 @@ export const testBackendConnection = async () => {
     
     return { 
       success: false, 
-      message: 'Cannot connect to backend server. Make sure it\'s running at http://localhost:5001' 
+      message: `Cannot connect to backend server. Make sure it's running at ${API_BASE_URL}` 
     };
   } catch (error) {
     console.error('Connection test failed:', error);
