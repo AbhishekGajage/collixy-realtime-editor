@@ -1,3 +1,4 @@
+// middleware/auth.js - FIXED VERSION
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
@@ -8,13 +9,16 @@ exports.protect = async (req, res, next) => {
   // Check Authorization header
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
+    console.log("🔐 Token from Authorization header:", token ? token.substring(0, 30) + "..." : "No token");
   }
   // Check cookies (for frontend)
   else if (req.cookies && req.cookies.token) {
     token = req.cookies.token;
+    console.log("🍪 Token from cookie");
   }
 
   if (!token) {
+    console.error("❌ No token found in request");
     return res.status(401).json({
       success: false,
       message: 'Please login to access this resource'
@@ -24,16 +28,22 @@ exports.protect = async (req, res, next) => {
   try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("✅ Token verified. Decoded:", decoded);
     
     // Get user from database
-    req.user = await User.findById(decoded.id);
+    req.user = await User.findById(decoded.id).select('-password');
     
     if (!req.user) {
+      console.error("❌ User not found in database for ID:", decoded.id);
       return res.status(401).json({
         success: false,
         message: 'User no longer exists'
       });
     }
+    
+    // Set both id and _id for compatibility
+    req.user.id = req.user._id;
+    console.log("✅ User authenticated:", req.user.email);
     
     // Check if account is active
     if (!req.user.isActive) {
@@ -45,6 +55,8 @@ exports.protect = async (req, res, next) => {
     
     next();
   } catch (error) {
+    console.error('❌ Auth middleware error:', error.message);
+    
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
         success: false,
@@ -93,7 +105,6 @@ exports.optionalAuth = async (req, res, next) => {
 exports.authorize = (...roles) => {
   return (req, res, next) => {
     // Check if user has required role
-    // This is a simplified version - in practice, you'd check document/room specific roles
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -106,3 +117,5 @@ exports.authorize = (...roles) => {
     next();
   };
 };
+
+// REMOVE THE DUPLICATE exports.protect FUNCTION!

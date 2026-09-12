@@ -1,3 +1,4 @@
+.env
 # Logs
 logs
 *.log
@@ -22,13 +23,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-cd frontend
-@"
-
-# Environment files (for frontend only)
-.env
-.env.*
-!.env.example
-"@ | Add-Content -Path ".gitignore" -Encoding UTF8
-cd ..

@@ -1,3 +1,4 @@
+// models/User.js - COMPLETE WORKING VERSION
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -30,13 +31,14 @@ const userSchema = new mongoose.Schema({
   },
   avatar: {
     type: String,
-    default: 'https://api.dicebear.com/7.x/avataaars/svg?seed='
+    default: ''
   },
   bio: {
     type: String,
     maxlength: [200, 'Bio cannot exceed 200 characters'],
     default: ''
   },
+  
   // Social login IDs
   googleId: {
     type: String,
@@ -105,7 +107,7 @@ const userSchema = new mongoose.Schema({
       default: 0
     },
     totalEditingTime: {
-      type: Number, // in minutes
+      type: Number,
       default: 0
     }
   },
@@ -143,7 +145,7 @@ const userSchema = new mongoose.Schema({
   // Account status
   isVerified: {
     type: Boolean,
-    default: false
+    default: true,
   },
   isActive: {
     type: Boolean,
@@ -161,8 +163,30 @@ const userSchema = new mongoose.Schema({
   emailVerificationExpire: Date
 }, {
   timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  toJSON: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      delete ret.password;
+      delete ret.resetPasswordToken;
+      delete ret.resetPasswordExpire;
+      delete ret.emailVerificationToken;
+      delete ret.emailVerificationExpire;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      delete ret.password;
+      delete ret.resetPasswordToken;
+      delete ret.resetPasswordExpire;
+      delete ret.emailVerificationToken;
+      delete ret.emailVerificationExpire;
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
 
 // Virtual for user display name
@@ -170,33 +194,131 @@ userSchema.virtual('displayName').get(function() {
   return this.username;
 });
 
-// Indexes - ONLY KEEP NON-DUPLICATE INDEXES
-// These fields already have indexes from unique: true and sparse: true:
-// - email (unique: true)
-// - username (unique: true) 
-// - googleId (unique: true, sparse: true)
-// - githubId (unique: true, sparse: true)
-
-// Only define indexes NOT already created by field definitions:
+// Indexes
 userSchema.index({ 'collaboratingOn.document': 1 });
 userSchema.index({ lastActive: -1 });
+userSchema.index({ email: 1 });
+userSchema.index({ username: 1 });
 
-// Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+// ========== MIDDLEWARE - FIXED VERSION ==========
+
+// Pre-save middleware: Combine all operations into one middleware
+userSchema.pre('save', async function() {  // Removed 'next' parameter
+  console.log('🔐 User pre-save middleware running...');
   
   try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
+    // 1. Ensure email is lowercase
+    if (this.email && this.isModified('email')) {
+      this.email = this.email.toLowerCase().trim();
+    }
+    
+    // 2. Hash password if modified
+    if (this.isModified('password') && this.password) {
+      console.log('🔐 Hashing password...');
+      const salt = await bcrypt.genSalt(10);
+      this.password = await bcrypt.hash(this.password, salt);
+      console.log('🔐 Password hashed successfully');
+    }
+    
+    // 3. Set avatar if not set
+    if (!this.avatar && this.username) {
+      this.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(this.username)}`;
+      console.log('🖼️ Avatar set:', this.avatar);
+    }
+    
+    // 4. Set default settings if not provided
+    if (!this.settings) {
+      this.settings = {
+        theme: 'system',
+        editor: {
+          fontSize: 14,
+          tabSize: 2,
+          lineNumbers: true,
+          wordWrap: false,
+          autoComplete: true
+        },
+        notifications: {
+          emailNotifications: true,
+          pushNotifications: true
+        }
+      };
+    }
+    
+    // 5. Set default stats if not provided
+    if (!this.stats) {
+      this.stats = {
+        documentsCreated: 0,
+        collaborations: 0,
+        totalEditingTime: 0
+      };
+    }
+    
+    console.log('✅ User pre-save middleware completed');
+    // No need to call next() - async function completes automatically
+    
   } catch (error) {
-    next(error);
+    console.error('❌ User pre-save middleware error:', error);
+    throw error;  // Just throw the error instead of next(error)
   }
 });
 
+// ========== STATIC METHODS ==========
+
+// Helper to generate username for social login
+userSchema.statics.generateUsernameFromEmail = async function(email) {
+  const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 25);
+  let username = baseUsername;
+  let counter = 1;
+  
+  // Check if username exists
+  while (await this.findOne({ username })) {
+    username = `${baseUsername}${counter}`;
+    counter++;
+  }
+  
+  return username;
+};
+
+// Find by email or username
+userSchema.statics.findByEmailOrUsername = async function(identifier) {
+  return this.findOne({
+    $or: [
+      { email: identifier.toLowerCase() },
+      { username: identifier }
+    ]
+  }).select('+password');
+};
+
+// Create new user with validation
+userSchema.statics.createUser = async function(userData) {
+  try {
+    console.log('👤 Creating user with data:', {
+      username: userData.username,
+      email: userData.email
+    });
+    
+    const user = new this(userData);
+    await user.save();
+    
+    console.log('✅ User created successfully:', user.email);
+    return user;
+  } catch (error) {
+    console.error('❌ Error creating user:', error.message);
+    throw error;
+  }
+};
+
+// ========== INSTANCE METHODS ==========
+
 // Method to compare password
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+  try {
+    if (!this.password) return false;
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    console.error('❌ Error comparing password:', error);
+    return false;
+  }
 };
 
 // Method to get public profile
@@ -216,8 +338,12 @@ userSchema.methods.getPublicProfile = function() {
 
 // Method to update last active
 userSchema.methods.updateLastActive = async function() {
-  this.lastActive = Date.now();
-  await this.save({ validateBeforeSave: false });
+  try {
+    this.lastActive = Date.now();
+    await this.save({ validateBeforeSave: false });
+  } catch (error) {
+    console.error('❌ Error updating last active:', error);
+  }
 };
 
 // Method to generate reset token
@@ -234,4 +360,33 @@ userSchema.methods.getResetPasswordToken = function() {
   return resetToken;
 };
 
-module.exports = mongoose.model('User', userSchema);
+// Method to generate email verification token
+userSchema.methods.getEmailVerificationToken = function() {
+  const verificationToken = crypto.randomBytes(20).toString('hex');
+  
+  this.emailVerificationToken = crypto
+    .createHash('sha256')
+    .update(verificationToken)
+    .digest('hex');
+    
+  this.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  
+  return verificationToken;
+};
+
+userSchema.methods.verifyEmail = async function() {
+  this.isVerified = true;
+  this.emailVerificationToken = undefined;
+  this.emailVerificationExpire = undefined;
+  await this.save({ validateBeforeSave: false });
+  return this;
+};
+
+// Method to check if email is verified
+userSchema.methods.isEmailVerified = function() {
+  return this.isVerified === true;
+};
+// ========== EXPORT ==========
+
+const User = mongoose.model('User', userSchema);
+module.exports = User;

@@ -1,139 +1,54 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap');
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 230 25% 18%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 230 25% 18%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 230 25% 18%;
-
-    --primary: 230 100% 40%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 240 50% 96%;
-    --secondary-foreground: 230 25% 18%;
-
-    --muted: 230 20% 96%;
-    --muted-foreground: 230 10% 50%;
-
-    --accent: 280 100% 65%;
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 230 20% 90%;
-    --input: 230 20% 90%;
-    --ring: 230 100% 40%;
-
-    --radius: 0.75rem;
-
-    /* Collixy brand colors */
-    --collixy-blue: 230 100% 40%;
-    --collixy-purple: 280 100% 65%;
-    --collixy-pink: 330 100% 70%;
-    --collixy-cyan: 180 100% 45%;
-    --collixy-navy: 230 60% 20%;
-
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 230 60% 8%;
-    --foreground: 0 0% 98%;
-
-    --card: 230 55% 12%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 230 55% 12%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 230 100% 55%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 230 40% 18%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 230 30% 16%;
-    --muted-foreground: 230 10% 65%;
-
-    --accent: 180 100% 45%;
-    --accent-foreground: 230 60% 8%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 230 30% 20%;
-    --input: 230 30% 20%;
-    --ring: 180 100% 45%;
-
-    /* Dark mode brand colors */
-    --collixy-blue: 230 100% 55%;
-    --collixy-purple: 280 100% 70%;
-    --collixy-pink: 330 100% 75%;
-    --collixy-cyan: 180 100% 50%;
-    --collixy-navy: 230 60% 15%;
-
-    --sidebar-background: 230 55% 10%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 230 35% 15%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 230 30% 20%;
-    --sidebar-ring: 180 100% 50%;
-  }
+@import "tailwindcss";
+:root {
+  --font-primary: "Inter", sans-serif;
+  --font-brand: "Poppins", sans-serif;
+}
+:root {
+  /* Light theme variables */
+  --bg-primary: #EDF1FE;
+  --bg-secondary: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: #333333;
+  --button-primary: #0F2854;
+  --button-secondary: #0a84ff3f;
+  --border-color: #e0e0e0;
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', sans-serif;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Poppins', sans-serif;
-  }
+[data-theme="dark"] {
+  /* Dark theme variables */
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --button-primary: #0d47a1;
+  --button-secondary: #1e3a8a;
+  --border-color: #2d3748;
 }
 
-@layer utilities {
-  .gradient-text {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, hsl(var(--collixy-blue)), hsl(var(--collixy-cyan)));
-  }
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
 
-  .gradient-text-hero {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, hsl(var(--collixy-blue)), hsl(var(--collixy-pink)));
-  }
+/* You can use these variables throughout your app */
+.themed-bg {
+  background-color: var(--bg-primary);
+}
 
-  .gradient-logo {
-    background: linear-gradient(135deg, hsl(var(--collixy-blue)), hsl(var(--collixy-purple)), hsl(var(--collixy-pink)));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
+.themed-text {
+  color: var(--text-primary);
+}
+/* Add to your global CSS file */
+@keyframes moveBackground {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(100px, 100px); }
+}
 
-  .glass-card {
-    @apply bg-card/80 backdrop-blur-md border border-border/50;
-  }
+@keyframes gradient-x {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 3s ease infinite;
 }

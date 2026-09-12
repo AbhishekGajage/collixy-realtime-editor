@@ -1,0 +1,13 @@
+{
+  "//": "Rooms live in in-memory Maps in src/server.js, so every nodemon restart drops every active room. By default nodemon watches the whole backend folder, which means an avatar upload into uploads/ or a new log file would kick everyone out of their room mid-session. Restrict the watcher to source only.",
+  "watch": ["src"],
+  "ext": "js,json",
+  "ignore": [
+    "uploads/**",
+    "logs/**",
+    "src/**/*.test.js",
+    "coverage/**",
+    "node_modules/**"
+  ],
+  "delay": 500
+}

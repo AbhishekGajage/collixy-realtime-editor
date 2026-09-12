@@ -11,6 +11,7 @@ const generateToken = (id) => {
 // @desc    Register user
 // @route   POST /api/users/register
 // @access  Public
+// controllers/userControllers.js
 exports.register = async (req, res, next) => {
   try {
     const { username, email, password } = req.body;

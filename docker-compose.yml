@@ -1,0 +1,76 @@
+services:
+  # ─── MongoDB ───────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: collixy-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: collixy-db
+    networks:
+      - collixy-net
+
+  # ─── Redis ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: collixy-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - collixy-net
+
+  # ─── Backend (Node / Express / Socket.IO) ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: collixy-backend
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    depends_on:
+      - mongo
+      - redis
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override DB & Redis to use Docker service names
+      MONGODB_URI: mongodb://mongo:27017/collixy-db
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: http://localhost
+      BACKEND_URL: http://localhost:5001
+    networks:
+      - collixy-net
+
+  # ─── Frontend (Vite → nginx) ───────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_BACKEND_URL: http://localhost:5001
+        VITE_FRONTEND_URL: http://localhost
+        VITE_GOOGLE_OAUTH_ENABLED: "true"
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    container_name: collixy-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - collixy-net
+
+volumes:
+  mongo_data:
+  redis_data:
+
+networks:
+  collixy-net:
+    driver: bridge

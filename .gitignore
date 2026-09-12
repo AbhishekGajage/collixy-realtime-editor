@@ -107,3 +107,8 @@ Desktop.ini
 # Cache directories
 .cache/
 .turbo/
+# ============================================
+# 🧪 VERIFICATION HARNESS SCRATCH
+# ============================================
+# Regenerated on every `node scripts/verify-collab.js` run; safe to delete.
+backend/.verify-tmp/
