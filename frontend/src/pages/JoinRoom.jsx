@@ -10,7 +10,6 @@ import {
   FiLogOut,
   FiCopy,
   FiUsers,
-  FiPlay,
   FiGlobe,
   FiCode,
   FiTerminal,
@@ -1148,17 +1147,6 @@ const JoinRoom = () => {
               <div className="flex items-center space-x-2">
                 <FiTerminal className="w-4 h-4 text-green-400" />
                 <span className="text-sm font-medium">Output</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <button
-                  onClick={() => {
-                    toast.success("Running code...");
-                  }}
-                  className="flex items-center space-x-1 px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-xs transition-colors"
-                >
-                  <FiPlay className="w-3 h-3" />
-                  <span>Run</span>
-                </button>
               </div>
             </div>
 
