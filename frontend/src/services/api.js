@@ -1,6 +1,5 @@
 // services/api.js
 import axios from 'axios';
-import { LANGUAGE_VERSIONS } from "../utils/constants";
 
 // Backend base URL: configured via environment variable with fallback
 const API_BASE_URL = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5001').replace(/\/+$/, '');
@@ -15,10 +14,13 @@ const api = axios.create({
   timeout: 15000, // Increased timeout
 });
 
-const API = axios.create({
-  baseURL: "https://emkc.org/api/v2/piston",
-  timeout: 10000, // 10 second timeout
-});
+// NOTE: Code execution used to call the public emkc.org Piston API directly
+// from the browser via a separate axios instance. That API now requires an
+// authorization key and returns 401 without one (as of Feb 15, 2026), so
+// execution is proxied through our own backend instead, which talks to a
+// self-hosted Piston instance (see backend/src/routes/execute.js and
+// docker-compose.yml's `piston` service). The `api` instance above is reused
+// for this — no separate axios client needed.
 
 // Request interceptor for debugging
 api.interceptors.request.use(
@@ -231,59 +233,53 @@ export const getGoogleAuthUrl = async () => {
   }
 };
 
-// Check available languages first
+// Check available languages first — now proxied through our own backend,
+// which talks to a self-hosted Piston instance (see services/api.js note
+// above and backend/src/routes/execute.js).
 export const getAvailableLanguages = async () => {
   try {
-    const response = await API.get("/runtimes");
-    return response.data;
+    const response = await api.get("/api/execute/runtimes");
+    return response.data.runtimes || [];
   } catch (error) {
     console.error("Failed to fetch available languages:", error);
     return [];
   }
 };
 
-// Updated executeCode with better error handling
-export const executeCode = async (language, sourceCode) => {
+// Updated executeCode with better error handling.
+// Version resolution now happens server-side (the backend matches against
+// whatever is actually installed on the self-hosted Piston instance), so we
+// just send the language and let it pick a sensible version.
+export const executeCode = async (language, sourceCode, stdin = "") => {
   try {
-    // First, let's check if the language is supported by the API
-    const runtimes = await getAvailableLanguages();
-    const supportedLanguages = runtimes.map(runtime => runtime.language);
-    
-    if (!supportedLanguages.includes(language)) {
-      throw new Error(`Language "${language}" is not supported by the execution engine.`);
-    }
-
-    // Find the correct version for the language
-    const languageRuntime = runtimes.find(runtime => runtime.language === language);
-    const version = LANGUAGE_VERSIONS[language] || languageRuntime?.version || "latest";
-
-    const response = await API.post("/execute", {
-      language: language,
-      version: version,
-      files: [
-        {
-          content: sourceCode,
-        },
-      ],
+    const response = await api.post("/api/execute", {
+      language,
+      sourceCode,
+      stdin,
     });
-    
-    return response.data;
+
+    return response.data.result;
   } catch (error) {
     console.error("Execution error:", error);
-    
+
     // Provide more helpful error messages
     if (error.response) {
-      if (error.response.status === 400) {
-        throw new Error(`Language "${language}" or its version is not supported. Try a different language.`);
-      } else if (error.response.status === 429) {
-        throw new Error("Rate limit exceeded. Please try again in a moment.");
-      } else if (error.response.status === 500) {
+      const status = error.response.status;
+      const serverMessage = error.response.data?.message;
+
+      if (status === 400) {
+        throw new Error(serverMessage || `Language "${language}" or its version is not supported. Try a different language.`);
+      } else if (status === 429) {
+        throw new Error(serverMessage || "Too many execution requests. Please wait a moment before running code again.");
+      } else if (status === 502) {
+        throw new Error(serverMessage || "The code execution service is unavailable right now. Please try again shortly.");
+      } else if (status === 500) {
         throw new Error("Server error. The execution engine might be down.");
       }
     } else if (error.code === 'ECONNABORTED') {
       throw new Error("Request timeout. The execution took too long.");
     }
-    
+
     throw error;
   }
 };

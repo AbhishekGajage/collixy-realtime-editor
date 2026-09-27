@@ -769,6 +769,11 @@ app.use("/api/auth", authLimiter, authRoutes);
 const userRoutes = require("./routes/user");
 app.use("/api/users", userRoutes);
 
+// Code execution routes — proxies to a self-hosted Piston instance instead
+// of the browser calling the (now key-gated) public emkc.org Piston API.
+const executeRoutes = require("./routes/execute");
+app.use("/api/execute", executeRoutes);
+
 // ========== GOOGLE OAUTH ROUTES ==========
 
 // Google OAuth URL endpoint

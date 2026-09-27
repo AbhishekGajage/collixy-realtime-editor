@@ -25,6 +25,26 @@ services:
     networks:
       - collixy-net
 
+  # ─── Piston (self-hosted code execution engine) ─
+  # Replaces the public emkc.org Piston API, which now requires an
+  # authorization key and returns 401 without one (as of Feb 15, 2026).
+  # `privileged: true` is required — Piston sandboxes each run in its own
+  # nsjail/cgroup, which needs real kernel privileges. This is why Piston
+  # cannot run on most restricted-container PaaS platforms (see render.yaml).
+  piston:
+    image: ghcr.io/engineer-man/piston
+    container_name: collixy-piston
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "2000:2000"
+    volumes:
+      - piston_packages:/piston/packages
+    tmpfs:
+      - /tmp:exec
+    networks:
+      - collixy-net
+
   # ─── Backend (Node / Express / Socket.IO) ──
   backend:
     build:
@@ -37,6 +57,7 @@ services:
     depends_on:
       - mongo
       - redis
+      - piston
     env_file:
       - ./backend/.env
     environment:
@@ -45,6 +66,8 @@ services:
       REDIS_URL: redis://redis:6379
       FRONTEND_URL: http://localhost
       BACKEND_URL: http://localhost:5001
+      # Self-hosted Piston, reached by its service name on the compose network
+      PISTON_URL: http://piston:2000
     networks:
       - collixy-net
 
@@ -70,6 +93,7 @@ services:
 volumes:
   mongo_data:
   redis_data:
+  piston_packages:
 
 networks:
   collixy-net:
