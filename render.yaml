@@ -30,13 +30,10 @@ services:
         sync: false
       - key: GOOGLE_REDIRECT_URI
         sync: false
-      # Self-hosted Piston (code execution) URL. Render's web services do not
-      # support `privileged: true` containers, which Piston requires for its
-      # per-run sandboxing — so Piston itself cannot run as a Render service
-      # in this file. Host it separately (a VPS/droplet with Docker, Fly.io
-      # Machines, etc. — see docker-compose.yml's `piston` service for the
-      # image/config) and point this at that instance's public URL.
-      - key: PISTON_URL
+      # Judge0 CE (free code execution via RapidAPI). Sign up at
+      # https://rapidapi.com/judge0-official/api/judge0-ce and paste your
+      # X-RapidAPI-Key here.  The free "Basic" plan gives ~50 runs/day.
+      - key: JUDGE0_API_KEY
         sync: false
       - key: EXECUTE_RATE_LIMIT_MAX
         value: 20
