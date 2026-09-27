@@ -2,7 +2,7 @@
 const express = require('express');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const router = express.Router();
-const { getRuntimes, runCode } = require('../controllers/executeController');
+const { getRuntimes, runCode, checkHealth } = require('../controllers/executeController');
 const { optionalAuth } = require('../middleware/auth');
 
 // Running code is far more expensive per-request than a normal API call
@@ -25,6 +25,9 @@ const executeLimiter = rateLimit({
 });
 
 router.use(optionalAuth);
+
+// Diagnostic endpoint — not rate-limited, no auth required.
+router.get('/health', checkHealth);
 
 router.get('/runtimes', executeLimiter, getRuntimes);
 router.post('/', executeLimiter, runCode);
