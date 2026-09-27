@@ -30,6 +30,16 @@ services:
         sync: false
       - key: GOOGLE_REDIRECT_URI
         sync: false
+      # Self-hosted Piston (code execution) URL. Render's web services do not
+      # support `privileged: true` containers, which Piston requires for its
+      # per-run sandboxing — so Piston itself cannot run as a Render service
+      # in this file. Host it separately (a VPS/droplet with Docker, Fly.io
+      # Machines, etc. — see docker-compose.yml's `piston` service for the
+      # image/config) and point this at that instance's public URL.
+      - key: PISTON_URL
+        sync: false
+      - key: EXECUTE_RATE_LIMIT_MAX
+        value: 20
 
   # Frontend Static Site (React + Vite SPA)
   - type: web

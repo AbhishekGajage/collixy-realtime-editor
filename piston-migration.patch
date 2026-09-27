@@ -1,0 +1,523 @@
+diff --git a/backend/env.example b/backend/env.example
+index 4ae939c..538cf61 100644
+--- a/backend/env.example
++++ b/backend/env.example
+@@ -53,6 +53,20 @@ EMAIL_FROM=noreply@collixy.com
+ REDIS_URL=redis://localhost:6379
+ # REDIS_URL=redis://:password@host:port (for cloud Redis)
+ 
++# ========================
++# ▶️ CODE EXECUTION (self-hosted Piston)
++# ========================
++# The public emkc.org Piston API now requires an authorization key (401
++# without one, as of Feb 15, 2026), so this project proxies execution
++# through your own Piston instance (see docker-compose.yml's `piston`
++# service). Point this at wherever that instance is reachable:
++#   - docker-compose (services share a network): http://piston:2000
++#   - local dev (piston run directly on the host): http://localhost:2000
++#   - a separately hosted/managed Piston instance: https://piston.yourdomain.com
++PISTON_URL=http://localhost:2000
++# Max execute requests per user/IP per minute (see routes/execute.js)
++EXECUTE_RATE_LIMIT_MAX=20
++
+ # ========================
+ # 🌐 CLIENT CONFIGURATION
+ # ========================
+diff --git a/backend/src/controllers/executeController.js b/backend/src/controllers/executeController.js
+new file mode 100644
+index 0000000..0bbb18b
+--- /dev/null
++++ b/backend/src/controllers/executeController.js
+@@ -0,0 +1,127 @@
++// controllers/executeController.js
++//
++// Proxies code execution to a self-hosted Piston instance
++// (https://github.com/engineer-man/piston). The public emkc.org Piston API
++// stopped being free to use without an authorization key as of Feb 15, 2026
++// (401 on every call), so this project now runs its own Piston container
++// (see docker-compose.yml) and the browser never talks to a third-party
++// execution API directly.
++//
++// PISTON_URL should point at the self-hosted instance, e.g.:
++//   - docker-compose (services on the same network): http://piston:2000
++//   - local dev (piston run via `docker run` on the host): http://localhost:2000
++//   - a separately hosted Piston instance: https://piston.yourdomain.com
++
++const axios = require('axios');
++
++const PISTON_URL = (process.env.PISTON_URL || 'http://localhost:2000').replace(/\/+$/, '');
++
++const piston = axios.create({
++  baseURL: PISTON_URL,
++  timeout: 15000,
++});
++
++// In-memory cache for the runtimes list — it rarely changes and every
++// execute request would otherwise trigger an extra round trip if the
++// caller wants to validate language/version first.
++let runtimesCache = { data: null, fetchedAt: 0 };
++const RUNTIMES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
++
++async function fetchRuntimes() {
++  const isFresh = runtimesCache.data && Date.now() - runtimesCache.fetchedAt < RUNTIMES_CACHE_TTL_MS;
++  if (isFresh) return runtimesCache.data;
++
++  const response = await piston.get('/api/v2/runtimes');
++  runtimesCache = { data: response.data, fetchedAt: Date.now() };
++  return runtimesCache.data;
++}
++
++// @desc    List available languages/versions installed on the Piston instance
++// @route   GET /api/execute/runtimes
++// @access  Public (rate limited)
++exports.getRuntimes = async (req, res) => {
++  try {
++    const runtimes = await fetchRuntimes();
++    res.json({ success: true, runtimes });
++  } catch (error) {
++    console.error('❌ [EXECUTE] Failed to fetch Piston runtimes:', error.message);
++    res.status(502).json({
++      success: false,
++      message: 'Code execution service is unavailable',
++      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
++    });
++  }
++};
++
++// @desc    Run source code for a given language/version
++// @route   POST /api/execute
++// @access  Public (rate limited)
++exports.runCode = async (req, res) => {
++  try {
++    const { language, version, sourceCode, stdin } = req.body;
++
++    if (!language || typeof language !== 'string') {
++      return res.status(400).json({ success: false, message: 'language is required' });
++    }
++    if (typeof sourceCode !== 'string' || sourceCode.length === 0) {
++      return res.status(400).json({ success: false, message: 'sourceCode is required' });
++    }
++    // Piston will happily accept huge payloads; cap it so one user can't
++    // tie up a sandbox slot (or the request body limit) with a multi-MB file.
++    if (sourceCode.length > 200_000) {
++      return res.status(413).json({ success: false, message: 'Source is too large to execute' });
++    }
++
++    // Resolve the version against the runtimes actually installed on this
++    // Piston instance rather than trusting whatever the client sent —
++    // a self-hosted instance may not have the exact version the frontend's
++    // static LANGUAGE_VERSIONS map expects installed.
++    const runtimes = await fetchRuntimes();
++    const runtime = runtimes.find(
++      (r) => r.language === language || (r.aliases || []).includes(language)
++    );
++
++    if (!runtime) {
++      return res.status(400).json({
++        success: false,
++        message: `Language "${language}" is not installed on this execution engine`,
++      });
++    }
++
++    const resolvedVersion = version || runtime.version;
++
++    console.log(`🏃 [EXECUTE] Running ${language}@${resolvedVersion} (${sourceCode.length} chars)`);
++
++    const response = await piston.post('/api/v2/execute', {
++      language: runtime.language,
++      version: resolvedVersion,
++      files: [{ content: sourceCode }],
++      stdin: stdin || '',
++    });
++
++    res.json({ success: true, result: response.data });
++  } catch (error) {
++    const status = error.response?.status;
++    console.error('❌ [EXECUTE] Execution failed:', status, error.response?.data || error.message);
++
++    if (status === 400) {
++      return res.status(400).json({
++        success: false,
++        message: error.response?.data?.message || 'Invalid language or version for execution',
++      });
++    }
++    if (status === 401 || status === 403) {
++      // Only relevant if PISTON_URL still points at a key-gated instance.
++      return res.status(502).json({
++        success: false,
++        message: 'Execution engine rejected the request (authorization). Check PISTON_URL / instance config.',
++      });
++    }
++
++    res.status(502).json({
++      success: false,
++      message: 'Code execution service is unavailable. Please try again shortly.',
++      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
++    });
++  }
++};
+diff --git a/backend/src/routes/execute.js b/backend/src/routes/execute.js
+new file mode 100644
+index 0000000..04c9901
+--- /dev/null
++++ b/backend/src/routes/execute.js
+@@ -0,0 +1,32 @@
++// routes/execute.js
++const express = require('express');
++const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
++const router = express.Router();
++const { getRuntimes, runCode } = require('../controllers/executeController');
++const { optionalAuth } = require('../middleware/auth');
++
++// Running code is far more expensive per-request than a normal API call
++// (it spins up a sandboxed process on the Piston side), so it gets its own,
++// tighter limit instead of sharing the general auth-route limiter.
++const executeLimiter = rateLimit({
++  windowMs: 60 * 1000, // 1 minute
++  max: process.env.EXECUTE_RATE_LIMIT_MAX ? Number(process.env.EXECUTE_RATE_LIMIT_MAX) : 20,
++  standardHeaders: true,
++  legacyHeaders: false,
++  message: {
++    success: false,
++    message: 'Too many execution requests. Please wait a moment before running code again.',
++  },
++  // Prefer per-user limiting when the caller is authenticated, falling back
++  // to per-IP so anonymous/landing-page usage is still capped sensibly.
++  // ipKeyGenerator() normalizes IPv6 addresses so a user can't bypass the
++  // limit by requesting from different addresses within the same /64.
++  keyGenerator: (req) => (req.user?.id ? `user:${req.user.id}` : ipKeyGenerator(req.ip)),
++});
++
++router.use(optionalAuth);
++
++router.get('/runtimes', executeLimiter, getRuntimes);
++router.post('/', executeLimiter, runCode);
++
++module.exports = router;
+diff --git a/backend/src/server.js b/backend/src/server.js
+index 3ac268f..aa4495f 100644
+--- a/backend/src/server.js
++++ b/backend/src/server.js
+@@ -769,6 +769,11 @@ app.use("/api/auth", authLimiter, authRoutes);
+ const userRoutes = require("./routes/user");
+ app.use("/api/users", userRoutes);
+ 
++// Code execution routes — proxies to a self-hosted Piston instance instead
++// of the browser calling the (now key-gated) public emkc.org Piston API.
++const executeRoutes = require("./routes/execute");
++app.use("/api/execute", executeRoutes);
++
+ // ========== GOOGLE OAUTH ROUTES ==========
+ 
+ // Google OAuth URL endpoint
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 9fbe35e..3b78bd0 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -25,6 +25,26 @@ services:
+     networks:
+       - collixy-net
+ 
++  # ─── Piston (self-hosted code execution engine) ─
++  # Replaces the public emkc.org Piston API, which now requires an
++  # authorization key and returns 401 without one (as of Feb 15, 2026).
++  # `privileged: true` is required — Piston sandboxes each run in its own
++  # nsjail/cgroup, which needs real kernel privileges. This is why Piston
++  # cannot run on most restricted-container PaaS platforms (see render.yaml).
++  piston:
++    image: ghcr.io/engineer-man/piston
++    container_name: collixy-piston
++    restart: unless-stopped
++    privileged: true
++    ports:
++      - "2000:2000"
++    volumes:
++      - piston_packages:/piston/packages
++    tmpfs:
++      - /tmp:exec
++    networks:
++      - collixy-net
++
+   # ─── Backend (Node / Express / Socket.IO) ──
+   backend:
+     build:
+@@ -37,6 +57,7 @@ services:
+     depends_on:
+       - mongo
+       - redis
++      - piston
+     env_file:
+       - ./backend/.env
+     environment:
+@@ -45,6 +66,8 @@ services:
+       REDIS_URL: redis://redis:6379
+       FRONTEND_URL: http://localhost
+       BACKEND_URL: http://localhost:5001
++      # Self-hosted Piston, reached by its service name on the compose network
++      PISTON_URL: http://piston:2000
+     networks:
+       - collixy-net
+ 
+@@ -70,6 +93,7 @@ services:
+ volumes:
+   mongo_data:
+   redis_data:
++  piston_packages:
+ 
+ networks:
+   collixy-net:
+diff --git a/frontend/src/services/api.js b/frontend/src/services/api.js
+index ea10d05..c1ec72c 100644
+--- a/frontend/src/services/api.js
++++ b/frontend/src/services/api.js
+@@ -1,6 +1,5 @@
+ // services/api.js
+ import axios from 'axios';
+-import { LANGUAGE_VERSIONS } from "../utils/constants";
+ 
+ // Backend base URL: configured via environment variable with fallback
+ const API_BASE_URL = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5001').replace(/\/+$/, '');
+@@ -15,10 +14,13 @@ const api = axios.create({
+   timeout: 15000, // Increased timeout
+ });
+ 
+-const API = axios.create({
+-  baseURL: "https://emkc.org/api/v2/piston",
+-  timeout: 10000, // 10 second timeout
+-});
++// NOTE: Code execution used to call the public emkc.org Piston API directly
++// from the browser via a separate axios instance. That API now requires an
++// authorization key and returns 401 without one (as of Feb 15, 2026), so
++// execution is proxied through our own backend instead, which talks to a
++// self-hosted Piston instance (see backend/src/routes/execute.js and
++// docker-compose.yml's `piston` service). The `api` instance above is reused
++// for this — no separate axios client needed.
+ 
+ // Request interceptor for debugging
+ api.interceptors.request.use(
+@@ -231,59 +233,53 @@ export const getGoogleAuthUrl = async () => {
+   }
+ };
+ 
+-// Check available languages first
++// Check available languages first — now proxied through our own backend,
++// which talks to a self-hosted Piston instance (see services/api.js note
++// above and backend/src/routes/execute.js).
+ export const getAvailableLanguages = async () => {
+   try {
+-    const response = await API.get("/runtimes");
+-    return response.data;
++    const response = await api.get("/api/execute/runtimes");
++    return response.data.runtimes || [];
+   } catch (error) {
+     console.error("Failed to fetch available languages:", error);
+     return [];
+   }
+ };
+ 
+-// Updated executeCode with better error handling
+-export const executeCode = async (language, sourceCode) => {
++// Updated executeCode with better error handling.
++// Version resolution now happens server-side (the backend matches against
++// whatever is actually installed on the self-hosted Piston instance), so we
++// just send the language and let it pick a sensible version.
++export const executeCode = async (language, sourceCode, stdin = "") => {
+   try {
+-    // First, let's check if the language is supported by the API
+-    const runtimes = await getAvailableLanguages();
+-    const supportedLanguages = runtimes.map(runtime => runtime.language);
+-    
+-    if (!supportedLanguages.includes(language)) {
+-      throw new Error(`Language "${language}" is not supported by the execution engine.`);
+-    }
+-
+-    // Find the correct version for the language
+-    const languageRuntime = runtimes.find(runtime => runtime.language === language);
+-    const version = LANGUAGE_VERSIONS[language] || languageRuntime?.version || "latest";
+-
+-    const response = await API.post("/execute", {
+-      language: language,
+-      version: version,
+-      files: [
+-        {
+-          content: sourceCode,
+-        },
+-      ],
++    const response = await api.post("/api/execute", {
++      language,
++      sourceCode,
++      stdin,
+     });
+-    
+-    return response.data;
++
++    return response.data.result;
+   } catch (error) {
+     console.error("Execution error:", error);
+-    
++
+     // Provide more helpful error messages
+     if (error.response) {
+-      if (error.response.status === 400) {
+-        throw new Error(`Language "${language}" or its version is not supported. Try a different language.`);
+-      } else if (error.response.status === 429) {
+-        throw new Error("Rate limit exceeded. Please try again in a moment.");
+-      } else if (error.response.status === 500) {
++      const status = error.response.status;
++      const serverMessage = error.response.data?.message;
++
++      if (status === 400) {
++        throw new Error(serverMessage || `Language "${language}" or its version is not supported. Try a different language.`);
++      } else if (status === 429) {
++        throw new Error(serverMessage || "Too many execution requests. Please wait a moment before running code again.");
++      } else if (status === 502) {
++        throw new Error(serverMessage || "The code execution service is unavailable right now. Please try again shortly.");
++      } else if (status === 500) {
+         throw new Error("Server error. The execution engine might be down.");
+       }
+     } else if (error.code === 'ECONNABORTED') {
+       throw new Error("Request timeout. The execution took too long.");
+     }
+-    
++
+     throw error;
+   }
+ };
+diff --git a/render.yaml b/render.yaml
+index bfbd016..db01be7 100644
+--- a/render.yaml
++++ b/render.yaml
+@@ -30,6 +30,16 @@ services:
+         sync: false
+       - key: GOOGLE_REDIRECT_URI
+         sync: false
++      # Self-hosted Piston (code execution) URL. Render's web services do not
++      # support `privileged: true` containers, which Piston requires for its
++      # per-run sandboxing — so Piston itself cannot run as a Render service
++      # in this file. Host it separately (a VPS/droplet with Docker, Fly.io
++      # Machines, etc. — see docker-compose.yml's `piston` service for the
++      # image/config) and point this at that instance's public URL.
++      - key: PISTON_URL
++        sync: false
++      - key: EXECUTE_RATE_LIMIT_MAX
++        value: 20
+ 
+   # Frontend Static Site (React + Vite SPA)
+   - type: web
+diff --git a/scripts/setup-piston-runtimes.js b/scripts/setup-piston-runtimes.js
+new file mode 100644
+index 0000000..3b1bf09
+--- /dev/null
++++ b/scripts/setup-piston-runtimes.js
+@@ -0,0 +1,111 @@
++#!/usr/bin/env node
++/**
++ * scripts/setup-piston-runtimes.js
++ *
++ * A freshly started Piston container (see docker-compose.yml's `piston`
++ * service) has zero language runtimes installed. This script installs the
++ * latest available version of every language Collixy's editor supports
++ * (kept in sync with `frontend/src/utils/constants.js`'s LANGUAGE_NAMES keys)
++ * by talking to Piston's package-management HTTP API directly:
++ *
++ *   GET    /api/v2/packages           - full catalog + install status
++ *   POST   /api/v2/packages           - { language, version } -> installs it
++ *
++ * Usage:
++ *   node scripts/setup-piston-runtimes.js
++ *   PISTON_URL=http://localhost:2000 node scripts/setup-piston-runtimes.js
++ *
++ * Run this once after `docker-compose up -d piston` (or whenever you add a
++ * new language to the frontend's language list). It's safe to re-run —
++ * already-installed languages are skipped.
++ */
++
++const PISTON_URL = (process.env.PISTON_URL || "http://localhost:2000").replace(/\/+$/, "");
++
++// Keep this list in sync with the keys of LANGUAGE_NAMES in
++// frontend/src/utils/constants.js. Piston's package "language" field is
++// lowercase and generally matches these names directly (aliases like "sh"
++// for "bash" aren't needed here since we match by primary language name).
++const SUPPORTED_LANGUAGES = [
++  "javascript",
++  "typescript",
++  "python",
++  "java",
++  "csharp",
++  "php",
++  "c",
++  "cpp",
++  "ruby",
++  "go",
++  "rust",
++  "swift",
++  "kotlin",
++  "r",
++  "dart",
++];
++
++async function main() {
++  console.log(`🔌 Talking to Piston at ${PISTON_URL} ...`);
++
++  const catalogRes = await fetch(`${PISTON_URL}/api/v2/packages`);
++  if (!catalogRes.ok) {
++    throw new Error(
++      `Failed to fetch package catalog: ${catalogRes.status} ${await catalogRes.text()}`
++    );
++  }
++  const catalog = await catalogRes.json();
++
++  const results = { installed: [], alreadyInstalled: [], skippedNoPackage: [], failed: [] };
++
++  for (const language of SUPPORTED_LANGUAGES) {
++    // A language may have several published versions; prefer the highest
++    // version number that isn't already installed, or note it's already there.
++    const candidates = catalog
++      .filter((pkg) => pkg.language.toLowerCase() === language.toLowerCase())
++      .sort((a, b) => (a.language_version < b.language_version ? 1 : -1));
++
++    if (candidates.length === 0) {
++      console.log(`⚠️  No Piston package found for "${language}" — skipping`);
++      results.skippedNoPackage.push(language);
++      continue;
++    }
++
++    const alreadyInstalled = candidates.find((pkg) => pkg.installed);
++    if (alreadyInstalled) {
++      console.log(`✅ ${language} already installed (${alreadyInstalled.language_version})`);
++      results.alreadyInstalled.push(language);
++      continue;
++    }
++
++    const target = candidates[0];
++    console.log(`📦 Installing ${language} ${target.language_version} ...`);
++    try {
++      const installRes = await fetch(`${PISTON_URL}/api/v2/packages`, {
++        method: "POST",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ language, version: target.language_version }),
++      });
++      if (!installRes.ok) {
++        throw new Error(`${installRes.status} ${await installRes.text()}`);
++      }
++      console.log(`✅ Installed ${language} ${target.language_version}`);
++      results.installed.push(language);
++    } catch (error) {
++      console.error(`❌ Failed to install ${language}: ${error.message}`);
++      results.failed.push(language);
++    }
++  }
++
++  console.log("\n──────── Summary ────────");
++  console.log(`Installed this run : ${results.installed.join(", ") || "(none)"}`);
++  console.log(`Already installed   : ${results.alreadyInstalled.join(", ") || "(none)"}`);
++  console.log(`No package found    : ${results.skippedNoPackage.join(", ") || "(none)"}`);
++  console.log(`Failed              : ${results.failed.join(", ") || "(none)"}`);
++
++  if (results.failed.length > 0) process.exitCode = 1;
++}
++
++main().catch((error) => {
++  console.error("💥 setup-piston-runtimes failed:", error.message);
++  process.exitCode = 1;
++});
