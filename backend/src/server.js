@@ -256,134 +256,134 @@ io.on("connection", (socket) => {
   );
 
   // ========== JOIN ROOM ==========
-// ========== JOIN ROOM ==========
-socket.on(ACTIONS.JOIN, async ({ roomId, username }) => {
-  try {
-    // Pasted room IDs routinely carry whitespace/newlines; the Map lookup below
-    // is exact, so normalize first or a valid ID reports ROOM_NOT_FOUND.
-    roomId = typeof roomId === "string" ? roomId.trim() : roomId;
+  // ========== JOIN ROOM ==========
+  socket.on(ACTIONS.JOIN, async ({ roomId, username }) => {
+    try {
+      // Pasted room IDs routinely carry whitespace/newlines; the Map lookup below
+      // is exact, so normalize first or a valid ID reports ROOM_NOT_FOUND.
+      roomId = typeof roomId === "string" ? roomId.trim() : roomId;
 
-    console.log(`👥 [BACKEND] JOIN event received`);
-    console.log(`   Room: ${roomId}`);
-    console.log(`   Username: ${username || 'Anonymous'}`);
-    console.log(`   Socket ID: ${socket.id}`);
-    
-    // DEBUG: Show all existing rooms
-    const allRooms = Array.from(rooms.keys());
-    console.log(`📊 [DEBUG] ALL EXISTING ROOMS:`, allRooms);
-    console.log(`📊 [DEBUG] Does room ${roomId} exist? ${rooms.has(roomId)}`);
-    
-    // Validate input
-    if (!roomId) {
-      console.log('❌ [BACKEND] No roomId provided');
-      socket.emit(ACTIONS.ERROR, { message: 'Room ID is required' });
-      return;
-    }
+      console.log(`👥 [BACKEND] JOIN event received`);
+      console.log(`   Room: ${roomId}`);
+      console.log(`   Username: ${username || 'Anonymous'}`);
+      console.log(`   Socket ID: ${socket.id}`);
 
-    // Check if room exists
-    if (!rooms.has(roomId)) {
-      console.log(`❌ [BACKEND] Room ${roomId} not found in rooms map`);
-      console.log(`   Available rooms: ${allRooms.join(', ') || 'None'}`);
-      socket.emit(ACTIONS.ROOM_NOT_FOUND, { 
-        roomId,
-        message: 'Room not found. Please check the Room ID.' 
-      });
-      return;
-    }
+      // DEBUG: Show all existing rooms
+      const allRooms = Array.from(rooms.keys());
+      console.log(`📊 [DEBUG] ALL EXISTING ROOMS:`, allRooms);
+      console.log(`📊 [DEBUG] Does room ${roomId} exist? ${rooms.has(roomId)}`);
 
-    const room = rooms.get(roomId);
-    
-    // Check if room is full
-    if (room.users.size >= (room.maxUsers || 10)) {
-      console.log(`❌ [BACKEND] Room ${roomId} is full`);
-      socket.emit(ACTIONS.ROOM_FULL, {
-        roomId,
-        currentUsers: room.users.size,
-        maxUsers: room.maxUsers || 10,
-        message: "Room is full"
-      });
-      return;
-    }
-
-    // Create user object
-    const user = {
-      id: socket.id,
-      username: username || `User-${socket.id.substring(0, 5)}`,
-      joinedAt: new Date().toISOString(),
-      isOnline: true,
-      isHost: false
-    };
-
-    // Store user globally
-    users.set(socket.id, {
-      ...user,
-      roomId
-    });
-
-    // Join the socket room
-    socket.join(roomId);
-    console.log(`✅ [BACKEND] ${user.username} joined room ${roomId}`);
-
-    // Add user to room
-    room.users.set(socket.id, user);
-    console.log(`✅ [BACKEND] Added ${user.username} to room ${roomId}`);
-    console.log(`   Total users in room now: ${room.users.size}`);
-
-    // Get all users in the room (including the new user)
-    const roomUsers = Array.from(room.users.values());
-    
-    console.log(`📋 [BACKEND] Users in room ${roomId}:`);
-    roomUsers.forEach(u => console.log(`   • ${u.username} (${u.id}) ${u.isHost ? '[HOST]' : ''}`));
-
-    // Send joined event to the new user with room info
-    console.log(`📤 [BACKEND] Sending JOINED to ${socket.id}`);
-    socket.emit(ACTIONS.JOINED, {
-      roomId,
-      user,
-      clients: roomUsers,
-      roomInfo: {
-        roomId,
-        totalUsers: roomUsers.length,
-        createdAt: room.createdAt,
-        language: room.language || 'javascript',
-        host: room.users.get(room.host)?.username || 'Unknown'
+      // Validate input
+      if (!roomId) {
+        console.log('❌ [BACKEND] No roomId provided');
+        socket.emit(ACTIONS.ERROR, { message: 'Room ID is required' });
+        return;
       }
-    });
 
-    // Send existing code to new user
-    console.log(`🔄 [BACKEND] Sending SYNC_CODE to ${socket.id}`);
-    socket.emit(ACTIONS.SYNC_CODE, {
-      code: room.code || '',
-      language: room.language || 'javascript',
-      lastUpdated: room.lastUpdated
-    });
+      // Check if room exists
+      if (!rooms.has(roomId)) {
+        console.log(`❌ [BACKEND] Room ${roomId} not found in rooms map`);
+        console.log(`   Available rooms: ${allRooms.join(', ') || 'None'}`);
+        socket.emit(ACTIONS.ROOM_NOT_FOUND, {
+          roomId,
+          message: 'Room not found. Please check the Room ID.'
+        });
+        return;
+      }
 
-    // Notify other users in the room about the new user
-    console.log(`📤 [BACKEND] Broadcasting USER_JOINED to room ${roomId}`);
-    socket.to(roomId).emit(ACTIONS.USER_JOINED, {
-      user,
-      timestamp: new Date().toISOString(),
-      totalUsers: roomUsers.length
-    });
+      const room = rooms.get(roomId);
 
-    // Broadcast updated user list to all users in the room
-    console.log(`📤 [BACKEND] Broadcasting ROOM_USERS_UPDATED to room ${roomId}`);
-    io.to(roomId).emit(ACTIONS.ROOM_USERS_UPDATED, {
-      roomId,
-      clients: roomUsers,
-      userJoined: user.username,
-      totalUsers: roomUsers.length,
-      timestamp: new Date().toISOString()
-    });
+      // Check if room is full
+      if (room.users.size >= (room.maxUsers || 10)) {
+        console.log(`❌ [BACKEND] Room ${roomId} is full`);
+        socket.emit(ACTIONS.ROOM_FULL, {
+          roomId,
+          currentUsers: room.users.size,
+          maxUsers: room.maxUsers || 10,
+          message: "Room is full"
+        });
+        return;
+      }
 
-  } catch (error) {
-    console.error('❌ [BACKEND] Error in JOIN event:', error);
-    socket.emit(ACTIONS.ERROR, { 
-      message: 'Failed to join room',
-      error: error.message 
-    });
-  }
-});
+      // Create user object
+      const user = {
+        id: socket.id,
+        username: username || `User-${socket.id.substring(0, 5)}`,
+        joinedAt: new Date().toISOString(),
+        isOnline: true,
+        isHost: false
+      };
+
+      // Store user globally
+      users.set(socket.id, {
+        ...user,
+        roomId
+      });
+
+      // Join the socket room
+      socket.join(roomId);
+      console.log(`✅ [BACKEND] ${user.username} joined room ${roomId}`);
+
+      // Add user to room
+      room.users.set(socket.id, user);
+      console.log(`✅ [BACKEND] Added ${user.username} to room ${roomId}`);
+      console.log(`   Total users in room now: ${room.users.size}`);
+
+      // Get all users in the room (including the new user)
+      const roomUsers = Array.from(room.users.values());
+
+      console.log(`📋 [BACKEND] Users in room ${roomId}:`);
+      roomUsers.forEach(u => console.log(`   • ${u.username} (${u.id}) ${u.isHost ? '[HOST]' : ''}`));
+
+      // Send joined event to the new user with room info
+      console.log(`📤 [BACKEND] Sending JOINED to ${socket.id}`);
+      socket.emit(ACTIONS.JOINED, {
+        roomId,
+        user,
+        clients: roomUsers,
+        roomInfo: {
+          roomId,
+          totalUsers: roomUsers.length,
+          createdAt: room.createdAt,
+          language: room.language || 'javascript',
+          host: room.users.get(room.host)?.username || 'Unknown'
+        }
+      });
+
+      // Send existing code to new user
+      console.log(`🔄 [BACKEND] Sending SYNC_CODE to ${socket.id}`);
+      socket.emit(ACTIONS.SYNC_CODE, {
+        code: room.code || '',
+        language: room.language || 'javascript',
+        lastUpdated: room.lastUpdated
+      });
+
+      // Notify other users in the room about the new user
+      console.log(`📤 [BACKEND] Broadcasting USER_JOINED to room ${roomId}`);
+      socket.to(roomId).emit(ACTIONS.USER_JOINED, {
+        user,
+        timestamp: new Date().toISOString(),
+        totalUsers: roomUsers.length
+      });
+
+      // Broadcast updated user list to all users in the room
+      console.log(`📤 [BACKEND] Broadcasting ROOM_USERS_UPDATED to room ${roomId}`);
+      io.to(roomId).emit(ACTIONS.ROOM_USERS_UPDATED, {
+        roomId,
+        clients: roomUsers,
+        userJoined: user.username,
+        totalUsers: roomUsers.length,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      console.error('❌ [BACKEND] Error in JOIN event:', error);
+      socket.emit(ACTIONS.ERROR, {
+        message: 'Failed to join room',
+        error: error.message
+      });
+    }
+  });
   // ========== CODE CHANGE ==========
   socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, language }) => {
     try {
@@ -403,8 +403,7 @@ socket.on(ACTIONS.JOIN, async ({ roomId, username }) => {
         room.lastUpdated = new Date();
 
         console.log(
-          `✅ [BACKEND] Code updated in room ${roomId} by ${
-            user?.username || "Anonymous"
+          `✅ [BACKEND] Code updated in room ${roomId} by ${user?.username || "Anonymous"
           }`
         );
 
@@ -440,8 +439,7 @@ socket.on(ACTIONS.JOIN, async ({ roomId, username }) => {
         room.lastUpdated = new Date();
 
         console.log(
-          `✅ [BACKEND] Language changed to ${language} in room ${roomId} by ${
-            user?.username || "Anonymous"
+          `✅ [BACKEND] Language changed to ${language} in room ${roomId} by ${user?.username || "Anonymous"
           }`
         );
 
@@ -608,8 +606,7 @@ function handleLeave(socket, roomId, username) {
     }
 
     console.log(
-      `👋 [BACKEND] Handling leave for ${
-        username || "Anonymous"
+      `👋 [BACKEND] Handling leave for ${username || "Anonymous"
       } from room ${roomId}`
     );
 
@@ -768,6 +765,7 @@ app.use("/api/auth", authLimiter, authRoutes);
 // Import user routes
 const userRoutes = require("./routes/user");
 app.use("/api/users", userRoutes);
+console.log("✅ Execute routes mounted at /api/execute"); // TEMP DEBUG
 
 // Code execution routes — proxies to a self-hosted Piston instance instead
 // of the browser calling the (now key-gated) public emkc.org Piston API.
@@ -1016,10 +1014,10 @@ app.use((err, req, res, next) => {
     error:
       process.env.NODE_ENV === "development"
         ? {
-            name: err.name,
-            stack: err.stack,
-            details: err.toString(),
-          }
+          name: err.name,
+          stack: err.stack,
+          details: err.toString(),
+        }
         : undefined,
     timestamp: new Date().toISOString(),
   });
