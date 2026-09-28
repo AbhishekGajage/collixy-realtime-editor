@@ -233,8 +233,8 @@ const RegisterPage = () => {
 
         {/* 2-Column Landscape Split */}
         <div className="flex flex-col md:flex-row min-h-[520px]">
-          {/* LEFT PANEL: Brand Showcase Hero */}
-          <div className="md:w-5/12 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden">
+          {/* LEFT PANEL: Brand Showcase Hero (50% Equal Width) */}
+          <div className="md:w-1/2 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden">
             {/* Ambient Background Glows */}
             <div className="absolute -top-16 -left-16 w-52 h-52 bg-white/10 rounded-full blur-2xl pointer-events-none" />
             <div className="absolute -bottom-16 -right-16 w-52 h-52 bg-purple-400/20 rounded-full blur-2xl pointer-events-none" />
@@ -300,8 +300,8 @@ const RegisterPage = () => {
             </div>
           </div>
 
-          {/* RIGHT PANEL: Landscape Form & Google Sign Up */}
-          <div className="md:w-7/12 p-6 sm:p-7 lg:p-8 flex flex-col justify-center bg-white dark:bg-gray-900">
+          {/* RIGHT PANEL: Landscape Form & Google Sign Up (50% Equal Width) */}
+          <div className="md:w-1/2 p-6 sm:p-7 lg:p-8 flex flex-col justify-center bg-white dark:bg-gray-900">
             {/* Header */}
             <div className="mb-4">
               <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
@@ -312,12 +312,12 @@ const RegisterPage = () => {
               </p>
             </div>
 
-            {/* 1-CLICK GOOGLE SIGN UP - Prominent and visible without scrolling */}
+            {/* 1-CLICK GOOGLE SIGN UP - No hover background color change */}
             <button
               onClick={handleGoogleSignUp}
               disabled={loading || googleLoading}
               type="button"
-              className="cursor-pointer w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-750 hover:border-gray-400 dark:hover:border-gray-600 transition-all duration-200 shadow-xs hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+              className="cursor-pointer w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {googleLoading ? (
                 <>
