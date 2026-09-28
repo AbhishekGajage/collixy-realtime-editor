@@ -39,7 +39,7 @@ const CreateRoom = () => {
   
   const socketRef = useRef(null);
   const editorRef = useRef(null);
-  const codeRef = useRef("");
+  const codeRef = useRef(CODE_SNIPPETS.javascript || "");
   const isReceivingRemoteChange = useRef(false);
   const debounceTimerRef = useRef(null);
 
@@ -140,10 +140,12 @@ useEffect(() => {
       eventName: ACTIONS.CREATE_ROOM
     });
 
+    const initialCode = codeRef.current || value || (CODE_SNIPPETS && CODE_SNIPPETS[language]) || "";
     socketRef.current.emit(ACTIONS.CREATE_ROOM, {
       roomId,
       username,
-      language: language // Add language parameter
+      language: language,
+      code: initialCode
     });
 
     // ========== LISTEN FOR ROOM_CREATED EVENT ==========
@@ -243,6 +245,15 @@ useEffect(() => {
         });
         
         toast.success(`${data.user.username} joined the room!`);
+        
+        // Proactively send current live code to the room so the newly joined friend receives it instantly
+        if (socketRef.current) {
+          socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+            roomId,
+            code: codeRef.current || value || "",
+          });
+        }
+
         setMessages(prev => [...prev, {
           type: 'system',
           user: 'System',

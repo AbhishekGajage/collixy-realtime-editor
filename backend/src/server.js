@@ -90,7 +90,7 @@ io.on("connection", (socket) => {
   // ========== CREATE ROOM ==========
   socket.on(
     ACTIONS.CREATE_ROOM,
-    ({ roomId, username, language = "javascript" }) => {
+    ({ roomId, username, language = "javascript", code = "" }) => {
       try {
         console.log(`🏗️ [BACKEND] CREATE_ROOM event received`);
         console.log(`   Room ID from client: ${roomId}`);
@@ -148,6 +148,10 @@ io.on("connection", (socket) => {
 
           const existingUsers = Array.from(existing.users.values());
 
+          if (!existing.code && code) {
+            existing.code = code;
+          }
+
           socket.emit(ACTIONS.ROOM_CREATED, {
             roomId,
             user: rejoiningUser,
@@ -165,6 +169,7 @@ io.on("connection", (socket) => {
               createdAt: existing.createdAt,
               language: existing.language || "javascript",
               host: existing.users.get(existing.host)?.username || "Unknown",
+              code: existing.code || "",
             },
           });
           socket.emit(ACTIONS.SYNC_CODE, {
@@ -206,7 +211,7 @@ io.on("connection", (socket) => {
         const room = {
           id: roomId, // Use the ID from frontend
           host: socket.id,
-          code: "",
+          code: typeof code === "string" ? code : "",
           language: language,
           users: new Map([[socket.id, user]]),
           createdAt: new Date(),
@@ -346,7 +351,8 @@ io.on("connection", (socket) => {
           totalUsers: roomUsers.length,
           createdAt: room.createdAt,
           language: room.language || 'javascript',
-          host: room.users.get(room.host)?.username || 'Unknown'
+          host: room.users.get(room.host)?.username || 'Unknown',
+          code: room.code || ''
         }
       });
 

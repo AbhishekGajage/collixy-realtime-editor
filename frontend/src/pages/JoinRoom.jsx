@@ -172,6 +172,15 @@ const JoinRoom = () => {
             languageRef.current = roomLanguage; // Update the ref too
           }
 
+          const initialCode = roomInfo?.code;
+          if (initialCode !== undefined && initialCode !== null && initialCode !== "") {
+            setValue(initialCode);
+            codeRef.current = initialCode;
+            if (editorRef.current) {
+              editorRef.current.setValue(initialCode);
+            }
+          }
+
           setJoining(false);
           setIsLoading(false);
           setIsConnected(true);
@@ -351,7 +360,7 @@ const JoinRoom = () => {
             remoteLanguage,
           });
 
-          if (code) {
+          if (code !== undefined && code !== null) {
             isReceivingRemoteChange.current = true;
 
             if (remoteLanguage) {
@@ -541,6 +550,12 @@ const JoinRoom = () => {
   const onEditorMount = (editor) => {
     editorRef.current = editor;
     editor.focus();
+
+    if (codeRef.current) {
+      editor.setValue(codeRef.current);
+    } else if (value) {
+      editor.setValue(value);
+    }
 
     editor.updateOptions({
       automaticLayout: true,
