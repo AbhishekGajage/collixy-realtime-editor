@@ -11,15 +11,15 @@ export const UserProvider = ({ children }) => {
   useEffect(() => {
     const loadUserFromStorage = async () => {
       try {
-        // First check if user is already in localStorage
-        const storedUser = localStorage.getItem('user');
-        const token = localStorage.getItem('accessToken');
+        // First check if user is already in sessionStorage
+        const storedUser = sessionStorage.getItem('user');
+        const token = sessionStorage.getItem('accessToken');
         
         if (storedUser && token) {
-          // User exists in localStorage
+          // User exists in sessionStorage
           setUser(JSON.parse(storedUser));
           setLoading(false);
-          console.log('✅ Loaded user from localStorage:', JSON.parse(storedUser).email);
+          console.log('✅ Loaded user from sessionStorage:', JSON.parse(storedUser).email);
           return;
         }
         
@@ -28,23 +28,23 @@ export const UserProvider = ({ children }) => {
           return;
         }
 
-        // If token exists but no user in localStorage, fetch from API
+        // If token exists but no user in sessionStorage, fetch from API
         console.log('🔄 Fetching user from API...');
         const response = await authAPI.getCurrentUser();
         
         if (response.data.success) {
           setUser(response.data.user);
-          localStorage.setItem('user', JSON.stringify(response.data.user));
+          sessionStorage.setItem('user', JSON.stringify(response.data.user));
           console.log('✅ Fetched user from API:', response.data.user.email);
         } else {
           // Token might be invalid
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('user');
+          sessionStorage.removeItem('accessToken');
+          sessionStorage.removeItem('user');
         }
       } catch (error) {
         console.error('❌ Failed to load user:', error);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('user');
       } finally {
         setLoading(false);
       }
@@ -55,8 +55,8 @@ export const UserProvider = ({ children }) => {
 
   const login = (userData, token) => {
     console.log('🔑 Logging in user:', userData.email);
-    localStorage.setItem('accessToken', token);
-    localStorage.setItem('user', JSON.stringify(userData));
+    sessionStorage.setItem('accessToken', token);
+    sessionStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
 
@@ -66,8 +66,8 @@ export const UserProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('user');
       setUser(null);
       window.location.href = '/';
     }
@@ -75,7 +75,7 @@ export const UserProvider = ({ children }) => {
 
   const updateUser = (updatedUser) => {
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    sessionStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
   const value = {

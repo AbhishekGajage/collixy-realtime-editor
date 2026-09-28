@@ -32,7 +32,7 @@ const AuthCallback = () => {
         if (!token) {
           console.error('❌ No token in callback URL');
           // Check if user is already logged in
-          const existingToken = localStorage.getItem('accessToken');
+          const existingToken = sessionStorage.getItem('accessToken');
           if (existingToken) {
             console.log('📦 Found existing token, redirecting to dashboard');
             navigate('/dashboard');
@@ -43,8 +43,8 @@ const AuthCallback = () => {
         }
         
         // Store token
-        console.log('💾 Storing token in localStorage...');
-        localStorage.setItem('accessToken', token);
+        console.log('💾 Storing token in sessionStorage...');
+        sessionStorage.setItem('accessToken', token);
         console.log('✅ Token stored');
         
         // Remove token from URL for security

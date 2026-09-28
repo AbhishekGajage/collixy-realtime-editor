@@ -25,7 +25,7 @@ const api = axios.create({
 // Request interceptor for debugging
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
+    const token = sessionStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -79,8 +79,8 @@ api.interceptors.response.use(
     
     if (error.response?.status === 401) {
       console.log('🔒 Unauthorized, removing token');
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('user');
       // Don't redirect if already on login page
       if (!window.location.pathname.includes('/login')) {
         setTimeout(() => {

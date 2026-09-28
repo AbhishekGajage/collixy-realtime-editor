@@ -1,6 +1,6 @@
 // frontend/src/App.jsx
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
-import { ThemeProvider } from './Context/ThemeContext.jsx'; 
+import { ThemeProvider } from './Context/ThemeContext.jsx';
 import { UserProvider } from './Context/userContext.jsx';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
@@ -16,29 +16,29 @@ function App() {
     <ThemeProvider>
       <UserProvider>
         <Toaster
-        position="top-center"
-        reverseOrder={false}
-        gutter={8}
-        containerClassName=""
-        containerStyle={{}}
-        toastOptions={{
-          // Define default options
-          className: '',
-          duration: 3000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-          },
-          // Default options for specific types
-          success: {
+          position="top-center"
+          reverseOrder={false}
+          gutter={8}
+          containerClassName=""
+          containerStyle={{}}
+          toastOptions={{
+            // Define default options
+            className: '',
             duration: 3000,
-            theme: {
-              primary: 'green',
-              secondary: 'black',
+            style: {
+              background: '#363636',
+              color: '#fff',
             },
-          },
-        }}
-      />
+            // Default options for specific types
+            success: {
+              duration: 3000,
+              theme: {
+                primary: 'green',
+                secondary: 'black',
+              },
+            },
+          }}
+        />
         <Router>
           <Routes>
             <Route path="/" element={<LandingPage />} />
@@ -47,28 +47,28 @@ function App() {
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
-              <Dashboard />
+                <Dashboard />
               </ProtectedRoute>
-              } />
+            } />
             <Route path="/dashboard/room/create" element={
               <ProtectedRoute>
-              <CreateRoom/>
+                <CreateRoom />
               </ProtectedRoute>
-              } />
+            } />
 
-              <Route path="/dashboard/room/join" element={
+            <Route path="/dashboard/room/join" element={
               <ProtectedRoute>
-              <JoinRoom/>
+                <JoinRoom />
               </ProtectedRoute>
-              } />
+            } />
 
             {/* Shareable invite link. CreateRoom's "share" button hands out this
                 URL, and JoinRoom reads :roomId from the params and auto-joins. */}
             <Route path="/room/:roomId" element={
               <ProtectedRoute>
-              <JoinRoom/>
+                <JoinRoom />
               </ProtectedRoute>
-              } />
+            } />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </Router>

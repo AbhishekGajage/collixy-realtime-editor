@@ -15,7 +15,7 @@ const generateToken = (id) => {
   return jwt.sign(
     { id: id.toString() },
     process.env.JWT_SECRET,
-    { expiresIn: '30d' }
+    { expiresIn: process.env.JWT_EXPIRE || '1d' }
   );
 };
 
@@ -24,11 +24,10 @@ const sendTokenResponse = (user, statusCode, res,isNewUser = false) => {
   try {
     const token = generateToken(user._id);
 
-    // Cookie options
+    // Cookie options — session cookie (no `expires` / `maxAge`).
+    // The browser will delete this cookie when the user closes the browser,
+    // requiring them to log in again on next visit.
     const options = {
-      expires: new Date(
-        Date.now() + (process.env.JWT_COOKIE_EXPIRE || 30) * 24 * 60 * 60 * 1000
-      ),
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",

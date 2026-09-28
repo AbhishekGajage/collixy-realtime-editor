@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 const ProtectedRoute = ({ children }) => {
   // NOTE: userContext exposes `loading`, not `isLoading`. Destructuring the wrong
   // name made this gate always falsy, so every hard refresh fell through to the
-  // !user check before localStorage had hydrated and bounced the user to /login.
+  // !user check before sessionStorage had hydrated and bounced the user to /login.
   const { user, loading } = useAuth();
   const location = useLocation();
 

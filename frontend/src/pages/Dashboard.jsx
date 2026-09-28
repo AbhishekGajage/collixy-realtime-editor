@@ -19,8 +19,8 @@ const Dashboard = () => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [isNewUser] = useState(() => {
-    // Initialize from localStorage immediately
-    const storedIsNewUser = localStorage.getItem('isNewUser');
+    // Initialize from sessionStorage immediately
+    const storedIsNewUser = sessionStorage.getItem('isNewUser');
     return storedIsNewUser === 'true';
   });
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -154,7 +154,7 @@ const Dashboard = () => {
 
   const handleLogout = useCallback(() => {
     // Clear isNewUser flag before logout
-    localStorage.setItem('isNewUser', 'false');
+    sessionStorage.setItem('isNewUser', 'false');
     logout();
     navigate('/');
   }, [logout, navigate]);
@@ -226,7 +226,7 @@ const handleCreateRoom = useCallback(() => {
   // Check authentication and handle isNewUser
   useEffect(() => {
     if (!loading) {
-      const token = localStorage.getItem('accessToken');
+      const token = sessionStorage.getItem('accessToken');
       
       if (!user && !token) {
         console.log('🚫 No user or token, redirecting to login');
@@ -239,7 +239,7 @@ const handleCreateRoom = useCallback(() => {
   useEffect(() => {
     return () => {
       if (isNewUser) {
-        localStorage.setItem('isNewUser', 'false');
+        sessionStorage.setItem('isNewUser', 'false');
       }
     };
   }, [isNewUser]);

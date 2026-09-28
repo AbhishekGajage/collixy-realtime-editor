@@ -89,7 +89,7 @@ const LoginPage = () => {
         }));
         setSuccessMessage('Registration successful! Please login with your credentials.');
         if (location.state?.isNewUser) {
-          localStorage.setItem('isNewUser', 'true');
+          sessionStorage.setItem('isNewUser', 'true');
           console.log('✅ Set isNewUser flag from registration redirect');
         }
         // Clear location state, but keep `from` so a shared invite link survives
@@ -224,8 +224,8 @@ const LoginPage = () => {
 
       if (res.data.success) {
         console.log('✅ Email login successful');
-        localStorage.setItem("accessToken", res.data.token);
-        localStorage.setItem("isNewUser", res.data.isNewUser ? "true" : "false");
+        sessionStorage.setItem("accessToken", res.data.token);
+        sessionStorage.setItem("isNewUser", res.data.isNewUser ? "true" : "false");
         setUser(res.data.user);
         
         // Clear any stored registration data
