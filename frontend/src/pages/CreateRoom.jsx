@@ -551,22 +551,12 @@ useEffect(() => {
   const sendMessage = () => {
     if (!newMessage.trim() || !user) return;
     
-    const timestamp = new Date().toLocaleTimeString();
-    const messageData = {
-      type: 'user',
-      user: user.username || 'Anonymous',
-      message: newMessage,
-      timestamp
-    };
-    
-    setMessages(prev => [...prev, messageData]);
-    
     if (socketRef.current) {
       socketRef.current.emit(ACTIONS.CHAT_MESSAGE, {
         roomId,
         user: user.username || 'Anonymous',
-        message: newMessage,
-        timestamp
+        message: newMessage.trim(),
+        timestamp: new Date().toISOString()
       });
     }
     
