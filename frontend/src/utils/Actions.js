@@ -30,6 +30,10 @@ export const ACTIONS = {
     USER_TYPING: 'user-typing',        // emit
     TYPING: 'typing',                  // listen
 
+    // Cursor Actions
+    CURSOR_CHANGE: 'cursor-change',      // emit
+    CURSOR_UPDATED: 'cursor-updated',    // listen
+
     // Chat Actions
     CHAT_MESSAGE: 'chat-message',          // emit
     NEW_CHAT_MESSAGE: 'new-chat-message',  // listen

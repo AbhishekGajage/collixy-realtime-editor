@@ -29,6 +29,7 @@ import { CODE_SNIPPETS } from "../utils/constants";
 // Socket
 import { initSocket } from "../services/socket";
 import ACTIONS from "../utils/Actions";
+import { updateRemoteCursor, removeRemoteCursor, removeAllRemoteCursors, getLocalCursorPayload } from "../utils/remoteCursors";
 
 // Import user context
 import { useUser } from "../Context/userContext";
@@ -54,6 +55,8 @@ const JoinRoom = () => {
   const isLoadingRef = useRef(false); // Add this
   const joiningRef = useRef(false); // Add this
   const autoJoinedRef = useRef(false); // guards the one-shot auto-join
+  const cursorDisposableRef = useRef(null);
+  const selectionDisposableRef = useRef(null);
 
   // State
   const [roomId, setRoomId] = useState(normalizeRoomId(roomIdParam));
@@ -381,6 +384,21 @@ const JoinRoom = () => {
         }
       );
 
+      // ========== LISTEN FOR CURSOR_UPDATED EVENT (MULTI-CURSOR) ==========
+      socketRef.current.on(ACTIONS.CURSOR_UPDATED, ({ userId, username, cursor, selection }) => {
+        if (editorRef.current) {
+          updateRemoteCursor(editorRef.current, userId, username, cursor, selection);
+        }
+      });
+
+      // ========== REMOVE CURSOR ON USER_LEFT ==========
+      socketRef.current.on(ACTIONS.USER_LEFT, (data) => {
+        const leftId = data?.socketId || data?.user?.id;
+        if (editorRef.current && leftId) {
+          removeRemoteCursor(editorRef.current, leftId);
+        }
+      });
+
       // ========== LISTEN FOR ERROR EVENT ==========
       socketRef.current.on(ACTIONS.ERROR, ({ message }) => {
         console.error("❌ Error event received:", message);
@@ -562,6 +580,23 @@ const JoinRoom = () => {
       scrollBeyondLastLine: false,
       minimap: { enabled: true },
     });
+
+    // ── Emit cursor position changes to other users ──
+    const emitCursor = () => {
+      if (!socketRef.current || !roomId) return;
+      const payload = getLocalCursorPayload(editor);
+      if (payload) {
+        socketRef.current.emit(ACTIONS.CURSOR_CHANGE, {
+          roomId,
+          ...payload,
+        });
+      }
+    };
+
+    // Listen to cursor position changes
+    cursorDisposableRef.current = editor.onDidChangeCursorPosition(emitCursor);
+    // Listen to selection changes
+    selectionDisposableRef.current = editor.onDidChangeCursorSelection(emitCursor);
   };
 
   // Copy room ID to clipboard
@@ -652,6 +687,19 @@ const JoinRoom = () => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+      }
+      // Dispose cursor listeners
+      if (cursorDisposableRef.current) {
+        cursorDisposableRef.current.dispose();
+        cursorDisposableRef.current = null;
+      }
+      if (selectionDisposableRef.current) {
+        selectionDisposableRef.current.dispose();
+        selectionDisposableRef.current = null;
+      }
+      // Remove all remote cursor decorations
+      if (editorRef.current) {
+        removeAllRemoteCursors(editorRef.current);
       }
       if (socketRef.current) {
         socketRef.current.disconnect();

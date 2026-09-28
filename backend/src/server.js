@@ -516,6 +516,24 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ========== CURSOR CHANGE ==========
+  socket.on(ACTIONS.CURSOR_CHANGE, ({ roomId, cursor, selection }) => {
+    try {
+      if (rooms.has(roomId)) {
+        const user = users.get(socket.id);
+        // Broadcast cursor position to other users in the room (not the sender)
+        socket.to(roomId).emit(ACTIONS.CURSOR_UPDATED, {
+          userId: socket.id,
+          username: user?.username || "Anonymous",
+          cursor,
+          selection,
+        });
+      }
+    } catch (error) {
+      console.error("❌ [BACKEND] Error in cursor-change:", error);
+    }
+  });
+
   // ========== GET ROOM INFO ==========
   socket.on(ACTIONS.GET_ROOM_INFO, ({ roomId }) => {
     try {
@@ -664,6 +682,7 @@ function handleLeave(socket, roomId, username) {
             `📤 [BACKEND] Notifying others in room ${roomId} about user left`
           );
           socket.to(roomId).emit(ACTIONS.USER_LEFT, {
+            socketId: socket.id,
             user: {
               id: socket.id,
               username: userName,

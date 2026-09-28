@@ -24,6 +24,10 @@ const ACTIONS = {
     USER_TYPING: 'user-typing',
     TYPING: 'typing',
     
+    // Cursor Actions
+    CURSOR_CHANGE: 'cursor-change',
+    CURSOR_UPDATED: 'cursor-updated',
+    
     // Chat Actions
     CHAT_MESSAGE: 'chat-message',
     NEW_CHAT_MESSAGE: 'new-chat-message',

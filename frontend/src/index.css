@@ -52,3 +52,19 @@ body {
   background-size: 200% 200%;
   animation: gradient-x 3s ease infinite;
 }
+
+/* ─── Remote Multi-Cursor Styles ────────────────────────────── */
+@keyframes remoteCursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Ensure the cursor decoration container can show overflow (the label) */
+.monaco-editor .view-overlays .current-line ~ div [class*="remote-cursor-label-"] {
+  overflow: visible !important;
+}
+
+/* Let label overflow be visible inside Monaco overlay containers */
+.monaco-editor .view-overlays > div {
+  overflow: visible !important;
+}
