@@ -391,11 +391,12 @@ io.on("connection", (socket) => {
     }
   });
   // ========== CODE CHANGE ==========
-  socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, language }) => {
+  socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, language, changes }) => {
     try {
       console.log(`📝 [BACKEND] CODE_CHANGE event received`);
       console.log(`   Room: ${roomId}`);
       console.log(`   Code length: ${code?.length}`);
+      console.log(`   Changes: ${changes ? changes.length : "none"}`);
       console.log(`   Language: ${language}`);
       console.log(`   Room exists? ${rooms.has(roomId)}`);
 
@@ -404,7 +405,9 @@ io.on("connection", (socket) => {
         const user = users.get(socket.id);
 
         // Update room code
-        room.code = code || "";
+        if (code !== undefined) {
+          room.code = code;
+        }
         if (language) room.language = language;
         room.lastUpdated = new Date();
 
@@ -417,6 +420,7 @@ io.on("connection", (socket) => {
         console.log(`📤 [BACKEND] Broadcasting CODE_UPDATED to room ${roomId}`);
         socket.to(roomId).emit(ACTIONS.CODE_UPDATED, {
           code,
+          changes,
           language: language || room.language,
           user: user?.username || "Anonymous",
           timestamp: new Date().toISOString(),

@@ -50,11 +50,11 @@ const JoinRoom = () => {
   const editorRef = useRef(null);
   const codeRef = useRef("");
   const isReceivingRemoteChange = useRef(false);
-  const debounceTimerRef = useRef(null);
   const languageRef = useRef("javascript"); // ADD THIS LINE - Fix for languageRef error
   const isLoadingRef = useRef(false); // Add this
   const joiningRef = useRef(false); // Add this
   const autoJoinedRef = useRef(false); // guards the one-shot auto-join
+  const contentDisposableRef = useRef(null);
   const cursorDisposableRef = useRef(null);
   const selectionDisposableRef = useRef(null);
 
@@ -271,38 +271,52 @@ const JoinRoom = () => {
       // Server rebroadcasts an inbound CODE_CHANGE as CODE_UPDATED.
       socketRef.current.on(
         ACTIONS.CODE_UPDATED,
-        ({ code, user: remoteUser, language: remoteLanguage }) => {
+        ({ code, user: remoteUser, language: remoteLanguage, changes }) => {
           console.log("📝 Remote code change:", {
             remoteUser,
             codeLength: code?.length,
+            changesCount: changes?.length,
             remoteLanguage,
           });
 
-          if (code !== null && remoteUser !== currentUsername) {
-            isReceivingRemoteChange.current = true;
-
+          if (remoteUser !== currentUsername && editorRef.current) {
             // Update language if changed - use languageRef.current
             if (remoteLanguage && remoteLanguage !== languageRef.current) {
               setLanguage(remoteLanguage);
               languageRef.current = remoteLanguage; // Update the ref
             }
 
-            // Update code
-            if (editorRef.current) {
+            if (changes && Array.isArray(changes) && changes.length > 0) {
+              // Apply atomic delta edits non-destructively without moving cursor
+              isReceivingRemoteChange.current = true;
+              try {
+                const edits = changes.map((ch) => ({
+                  range: ch.range,
+                  text: ch.text,
+                  forceMoveMarkers: true,
+                }));
+                editorRef.current.executeEdits("remote-user", edits);
+                codeRef.current = editorRef.current.getValue();
+              } catch (err) {
+                console.error("Error applying remote delta edits:", err);
+              } finally {
+                setTimeout(() => {
+                  isReceivingRemoteChange.current = false;
+                }, 50);
+              }
+            } else if (code !== null && code !== undefined) {
+              // Full replacement fallback with cursor position preservation
+              isReceivingRemoteChange.current = true;
+              const pos = editorRef.current.getPosition();
+              const sel = editorRef.current.getSelection();
               editorRef.current.setValue(code);
-            }
-            setValue(code);
-            codeRef.current = code;
+              if (pos) editorRef.current.setPosition(pos);
+              if (sel) editorRef.current.setSelection(sel);
+              codeRef.current = code;
 
-            setTimeout(() => {
-              isReceivingRemoteChange.current = false;
-            }, 50);
-
-            if (remoteUser && remoteUser !== currentUsername) {
-              toast(`${remoteUser} updated the code`, {
-                icon: "✏️",
-                duration: 1500,
-              });
+              setTimeout(() => {
+                isReceivingRemoteChange.current = false;
+              }, 50);
             }
           }
         }
@@ -372,7 +386,11 @@ const JoinRoom = () => {
             }
 
             if (editorRef.current) {
+              const pos = editorRef.current.getPosition();
+              const sel = editorRef.current.getSelection();
               editorRef.current.setValue(code);
+              if (pos) editorRef.current.setPosition(pos);
+              if (sel) editorRef.current.setSelection(sel);
             }
             setValue(code);
             codeRef.current = code;
@@ -508,34 +526,6 @@ const JoinRoom = () => {
     };
   }, [roomIdParam, roomId, user, initSocketConnection]);
 
-  // Handle code changes with debounce
-  const handleCodeChange = useCallback(
-    (newValue) => {
-      const newCode = newValue || "";
-
-      if (!isReceivingRemoteChange.current) {
-        setValue(newCode);
-        codeRef.current = newCode;
-
-        if (debounceTimerRef.current) {
-          clearTimeout(debounceTimerRef.current);
-        }
-
-        debounceTimerRef.current = setTimeout(() => {
-          if (socketRef.current && user) {
-            socketRef.current.emit(ACTIONS.CODE_CHANGE, {
-              roomId,
-              code: newCode,
-              language: languageRef.current, // Use languageRef.current instead of language
-              user: user.username || "Anonymous",
-            });
-          }
-        }, 300);
-      }
-    },
-    [roomId, user]
-  ); // Remove language from dependencies
-
   // Handle language selection
   const handleLanguageSelect = useCallback(
     (selectedLanguage) => {
@@ -543,13 +533,21 @@ const JoinRoom = () => {
       languageRef.current = selectedLanguage; // Update the ref too
 
       const newCode = CODE_SNIPPETS[selectedLanguage] || "";
-      setValue(newCode);
       codeRef.current = newCode;
+
+      if (editorRef.current) {
+        isReceivingRemoteChange.current = true;
+        editorRef.current.setValue(newCode);
+        setTimeout(() => {
+          isReceivingRemoteChange.current = false;
+        }, 50);
+      }
 
       if (socketRef.current && user) {
         socketRef.current.emit(ACTIONS.CODE_CHANGE, {
           roomId,
           code: newCode,
+          changes: null,
           language: selectedLanguage,
           user: user.username || "Anonymous",
         });
@@ -579,6 +577,24 @@ const JoinRoom = () => {
       automaticLayout: true,
       scrollBeyondLastLine: false,
       minimap: { enabled: true },
+    });
+
+    // ── Listen to model content changes for real-time simultaneous typing ──
+    contentDisposableRef.current = editor.onDidChangeModelContent((event) => {
+      if (isReceivingRemoteChange.current) return;
+
+      const currentCode = editor.getValue();
+      codeRef.current = currentCode;
+
+      if (socketRef.current && user && roomId) {
+        socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+          roomId,
+          code: currentCode,
+          changes: event.changes,
+          language: languageRef.current,
+          user: user.username || "Anonymous",
+        });
+      }
     });
 
     // ── Emit cursor position changes to other users ──
@@ -685,8 +701,10 @@ const JoinRoom = () => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
+      // Dispose content change listener
+      if (contentDisposableRef.current) {
+        contentDisposableRef.current.dispose();
+        contentDisposableRef.current = null;
       }
       // Dispose cursor listeners
       if (cursorDisposableRef.current) {
@@ -1188,8 +1206,7 @@ const JoinRoom = () => {
               theme="vs-dark"
               language={language}
               onMount={onEditorMount}
-              value={value}
-              onChange={handleCodeChange}
+              defaultValue=""
             />
           </div>
 
@@ -1212,7 +1229,7 @@ const JoinRoom = () => {
             <div className="px-3 py-2 bg-gray-800 border-t border-gray-700 text-xs text-gray-400">
               <div className="flex justify-between">
                 <span>Language: {language}</span>
-                <span>Lines: {value.split("\n").length}</span>
+                <span>Users: {clients?.length || 0}</span>
               </div>
             </div>
           </div>

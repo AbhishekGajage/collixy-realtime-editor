@@ -42,7 +42,8 @@ const CreateRoom = () => {
   const editorRef = useRef(null);
   const codeRef = useRef(CODE_SNIPPETS.javascript || "");
   const isReceivingRemoteChange = useRef(false);
-  const debounceTimerRef = useRef(null);
+  const languageRef = useRef("javascript");
+  const contentDisposableRef = useRef(null);
   const cursorDisposableRef = useRef(null);
   const selectionDisposableRef = useRef(null);
 
@@ -297,29 +298,43 @@ useEffect(() => {
     socketRef.current.on(ACTIONS.CODE_UPDATED, (data) => {
       console.log('📝 [FRONTEND] CODE_UPDATED event received:', data);
       
-      if (data.code !== null && data.code !== undefined && data.user !== username) {
-        isReceivingRemoteChange.current = true;
-
-        if (data.language && data.language !== language) {
+      if (data.user !== username && editorRef.current) {
+        if (data.language && data.language !== languageRef.current) {
           console.log('🌐 Updating language from CODE_CHANGE:', data.language);
           setLanguage(data.language);
+          languageRef.current = data.language;
         }
 
-        if (editorRef.current) {
+        if (data.changes && Array.isArray(data.changes) && data.changes.length > 0) {
+          // Apply atomic delta edits non-destructively
+          isReceivingRemoteChange.current = true;
+          try {
+            const edits = data.changes.map((ch) => ({
+              range: ch.range,
+              text: ch.text,
+              forceMoveMarkers: true,
+            }));
+            editorRef.current.executeEdits('remote-user', edits);
+            codeRef.current = editorRef.current.getValue();
+          } catch (err) {
+            console.error('Error applying remote delta edits:', err);
+          } finally {
+            setTimeout(() => {
+              isReceivingRemoteChange.current = false;
+            }, 50);
+          }
+        } else if (data.code !== null && data.code !== undefined) {
+          // Full replacement fallback with cursor position preservation
+          isReceivingRemoteChange.current = true;
+          const pos = editorRef.current.getPosition();
+          const sel = editorRef.current.getSelection();
           editorRef.current.setValue(data.code);
-        }
-        setValue(data.code);
-        codeRef.current = data.code;
-
-        setTimeout(() => {
-          isReceivingRemoteChange.current = false;
-        }, 50);
-
-        if (data.user && data.user !== username) {
-          toast(`${data.user} updated the code`, {
-            icon: '✏️',
-            duration: 1500
-          });
+          if (pos) editorRef.current.setPosition(pos);
+          if (sel) editorRef.current.setSelection(sel);
+          codeRef.current = data.code;
+          setTimeout(() => {
+            isReceivingRemoteChange.current = false;
+          }, 50);
         }
       }
     });
@@ -446,11 +461,13 @@ useEffect(() => {
 
   return () => {
     cancelled = true;
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
     if (watchdogId) {
       clearTimeout(watchdogId);
+    }
+    // Dispose content change listener
+    if (contentDisposableRef.current) {
+      contentDisposableRef.current.dispose();
+      contentDisposableRef.current = null;
     }
     // Dispose cursor listeners
     if (cursorDisposableRef.current) {
@@ -473,43 +490,32 @@ useEffect(() => {
   };
 }, [roomId, user, navigate]);
 
-  // Handle code changes with debounce
-  const handleCodeChange = useCallback((newValue) => {
-    const newCode = newValue || "";
-    
-    if (!isReceivingRemoteChange.current) {
-      setValue(newCode);
-      codeRef.current = newCode;
-      
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      
-      debounceTimerRef.current = setTimeout(() => {
-        if (socketRef.current && user) {
-          socketRef.current.emit(ACTIONS.CODE_CHANGE, {
-            roomId,
-            code: newCode,
-            language,
-            user: user.username || 'Anonymous'
-          });
-        }
-      }, 300);
-    }
-  }, [roomId, user, language]);
+  // Keep languageRef synchronized
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   // Handle language selection
   const handleLanguageSelect = useCallback((selectedLanguage) => {
     setLanguage(selectedLanguage);
+    languageRef.current = selectedLanguage;
     
     const newCode = CODE_SNIPPETS[selectedLanguage] || "";
-    setValue(newCode);
     codeRef.current = newCode;
+    
+    if (editorRef.current) {
+      isReceivingRemoteChange.current = true;
+      editorRef.current.setValue(newCode);
+      setTimeout(() => {
+        isReceivingRemoteChange.current = false;
+      }, 50);
+    }
     
     if (socketRef.current && user) {
       socketRef.current.emit(ACTIONS.CODE_CHANGE, {
         roomId,
         code: newCode,
+        changes: null,
         language: selectedLanguage,
         user: user.username || 'Anonymous'
       });
@@ -531,6 +537,28 @@ useEffect(() => {
       automaticLayout: true,
       scrollBeyondLastLine: false,
       minimap: { enabled: true },
+    });
+
+    if (codeRef.current && editor.getValue() !== codeRef.current) {
+      editor.setValue(codeRef.current);
+    }
+
+    // ── Listen to model content changes for real-time simultaneous typing ──
+    contentDisposableRef.current = editor.onDidChangeModelContent((event) => {
+      if (isReceivingRemoteChange.current) return;
+
+      const currentCode = editor.getValue();
+      codeRef.current = currentCode;
+
+      if (socketRef.current && user && roomId) {
+        socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+          roomId,
+          code: currentCode,
+          changes: event.changes,
+          language: languageRef.current,
+          user: user.username || 'Anonymous'
+        });
+      }
     });
 
     // ── Emit cursor position changes to other users ──
@@ -926,8 +954,7 @@ useEffect(() => {
               theme="vs-dark"
               language={language}
               onMount={onEditorMount}
-              value={value}
-              onChange={handleCodeChange}
+              defaultValue={CODE_SNIPPETS.javascript}
             />
           </div>
 
