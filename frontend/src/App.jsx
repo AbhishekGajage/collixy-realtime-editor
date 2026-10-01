@@ -11,6 +11,10 @@ import CreateRoom from './pages/CreateRoom.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { Toaster } from 'react-hot-toast';
 import JoinRoom from './pages/JoinRoom.jsx';
+import AboutUs from './pages/AboutUs.jsx';
+import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
+import TermsOfService from './pages/TermsOfService.jsx';
+import ScrollToTop from './components/common/ScrollToTop.jsx';
 function App() {
   return (
     <ThemeProvider>
@@ -40,8 +44,12 @@ function App() {
           }}
         />
         <Router>
+          <ScrollToTop />
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/about" element={<AboutUs />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/auth/callback" element={<AuthCallback />} />

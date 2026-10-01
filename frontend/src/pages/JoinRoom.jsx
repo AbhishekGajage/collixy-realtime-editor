@@ -31,6 +31,8 @@ import { initSocket } from "../services/socket";
 import ACTIONS from "../utils/Actions";
 import { updateRemoteCursor, removeRemoteCursor, removeAllRemoteCursors, getLocalCursorPayload } from "../utils/remoteCursors";
 
+import api from "../services/api";
+
 // Import user context
 import { useUser } from "../Context/userContext";
 
@@ -57,6 +59,9 @@ const JoinRoom = () => {
   const contentDisposableRef = useRef(null);
   const cursorDisposableRef = useRef(null);
   const selectionDisposableRef = useRef(null);
+  const watchdogRef = useRef(null);
+  const isBlockedRef = useRef(false);
+  const isLeavingRef = useRef(false);
 
   // State
   const [roomId, setRoomId] = useState(normalizeRoomId(roomIdParam));
@@ -101,11 +106,39 @@ const JoinRoom = () => {
     joiningRef.current = true; // Update ref
 
     try {
+      // Pre-check room status before opening socket connection
+      try {
+        const cleanId = normalizeRoomId(roomId);
+        const res = await api.get(
+          `/api/rooms/user-status?username=${encodeURIComponent(username)}&targetRoomId=${encodeURIComponent(cleanId)}`
+        );
+        if (res.data?.inRoom) {
+          isBlockedRef.current = true;
+          toast.error(res.data.message || 'You cannot join this room at this time.', {
+            duration: 5000,
+            icon: '⚠️',
+          });
+          setIsLoading(false);
+          setJoining(false);
+          setIsConnected(false);
+          isLoadingRef.current = false;
+          joiningRef.current = false;
+          navigate('/dashboard');
+          return;
+        }
+      } catch (err) {
+        console.error('Error pre-checking room status before join:', err);
+      }
+
       socketRef.current = await initSocket();
       const currentUsername = username; // Store locally to avoid closure issues
 
       socketRef.current.on("connect_error", (err) => {
         console.error("Socket connection error:", err);
+        if (watchdogRef.current) {
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
+        }
         toast.error("Failed to connect to server");
         setIsLoading(false);
         setJoining(false);
@@ -116,6 +149,10 @@ const JoinRoom = () => {
 
       socketRef.current.on("connect_failed", (err) => {
         console.error("Socket connection failed:", err);
+        if (watchdogRef.current) {
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
+        }
         toast.error("Connection failed. Please refresh.");
         setIsLoading(false);
         setJoining(false);
@@ -126,6 +163,10 @@ const JoinRoom = () => {
 
       // Handle room not found
       socketRef.current.on(ACTIONS.ROOM_NOT_FOUND, () => {
+        if (watchdogRef.current) {
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
+        }
         toast.error("Room not found. Please check the Room ID.");
         setIsLoading(false);
         setJoining(false);
@@ -136,12 +177,86 @@ const JoinRoom = () => {
 
       // Handle room full
       socketRef.current.on(ACTIONS.ROOM_FULL, () => {
+        if (watchdogRef.current) {
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
+        }
         toast.error("Room is full. Maximum capacity reached.");
         setIsLoading(false);
         setJoining(false);
         setIsConnected(false);
         isLoadingRef.current = false; // Update ref
         joiningRef.current = false; // Update ref
+      });
+
+      // Handle user already in room (duplicate session)
+      socketRef.current.on(ACTIONS.USER_ALREADY_IN_ROOM, (data) => {
+        console.warn('⚠️ [FRONTEND] USER_ALREADY_IN_ROOM event received:', data);
+        isBlockedRef.current = true;
+        if (watchdogRef.current) {
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
+        }
+        toast.error(data?.message || 'You are already in this room from another session.', {
+          duration: 5000,
+          icon: '⚠️',
+        });
+        setIsLoading(false);
+        setJoining(false);
+        setIsConnected(false);
+        isLoadingRef.current = false;
+        joiningRef.current = false;
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
+        navigate('/dashboard');
+      });
+
+      // Handle user already in another room
+      socketRef.current.on(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, (data) => {
+        console.warn('⚠️ [FRONTEND] USER_ALREADY_IN_ANOTHER_ROOM event received:', data);
+        isBlockedRef.current = true;
+        if (watchdogRef.current) {
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
+        }
+        toast.error(data?.message || 'You are already in another room. Please leave it first.', {
+          duration: 5000,
+          icon: '⚠️',
+        });
+        setIsLoading(false);
+        setJoining(false);
+        setIsConnected(false);
+        isLoadingRef.current = false;
+        joiningRef.current = false;
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
+        navigate('/dashboard');
+      });
+
+      // Handle host closed room
+      socketRef.current.on(ACTIONS.ROOM_CLOSED, (data) => {
+        console.warn('🚪 [FRONTEND] Host closed the room:', data);
+        if (isLeavingRef.current || sessionStorage.getItem('logging_out') === 'true') return;
+        isBlockedRef.current = true;
+        if (watchdogRef.current) {
+          clearTimeout(watchdogRef.current);
+          watchdogRef.current = null;
+        }
+        toast(data?.message || 'The host has left and closed the room.', {
+          icon: '🚪',
+          duration: 5000,
+        });
+        setIsLoading(false);
+        setJoining(false);
+        setIsConnected(false);
+        isLoadingRef.current = false;
+        joiningRef.current = false;
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
+        navigate('/dashboard', { replace: true });
       });
 
       // ========== LISTEN FOR JOINED EVENT ==========
@@ -152,6 +267,10 @@ const JoinRoom = () => {
       socketRef.current.on(
         ACTIONS.JOINED,
         ({ clients: joinedClients, user: joinedUserObj, roomInfo }) => {
+          if (watchdogRef.current) {
+            clearTimeout(watchdogRef.current);
+            watchdogRef.current = null;
+          }
           console.log("✅ Joined room:", {
             joinedClients,
             joinedUserObj,
@@ -446,7 +565,11 @@ const JoinRoom = () => {
       );
 
       // ========== TIMEOUT CHECK ==========
-      setTimeout(() => {
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+      }
+      watchdogRef.current = setTimeout(() => {
+        if (isBlockedRef.current) return;
         console.log("⏰ [FRONTEND-JOIN] 5-second timeout check:");
         console.log("   Is socket connected?", socketRef.current?.connected);
         console.log("   Still loading?", isLoadingRef.current); // Use ref
@@ -473,6 +596,10 @@ const JoinRoom = () => {
         }
       }, 5000);
     } catch (error) {
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+      }
       console.error("Socket initialization error:", error);
       toast.error("Failed to join room");
       setIsLoading(false);
@@ -503,12 +630,29 @@ const JoinRoom = () => {
       return;
     }
 
+    // Pre-check room status before initiating socket connection
+    try {
+      const res = await api.get(
+        `/api/rooms/user-status?username=${encodeURIComponent(user.username)}&targetRoomId=${encodeURIComponent(cleanId)}`
+      );
+      if (res.data?.inRoom) {
+        toast.error(res.data.message || 'You cannot join this room at this time.', {
+          duration: 5000,
+          icon: '⚠️',
+        });
+        return;
+      }
+    } catch (err) {
+      console.error('Error pre-checking room status:', err);
+    }
+
     await initSocketConnection();
   }, [roomId, user, navigate, initSocketConnection]);
 
   // Arriving via a shared /room/:roomId invite link: join automatically instead
   // of showing the paste-the-ID form.
   useEffect(() => {
+    if (isLeavingRef.current || sessionStorage.getItem('logging_out') === 'true') return;
     if (autoJoinedRef.current) return;
     if (!roomIdParam || !user) return;
     if (normalizeRoomId(roomId) !== normalizeRoomId(roomIdParam)) return;
@@ -517,14 +661,33 @@ const JoinRoom = () => {
     // Deferred to a task so the connect (and its setState calls) happens after
     // this render commits rather than synchronously inside the effect body.
     let cancelled = false;
-    const id = setTimeout(() => {
+    const id = setTimeout(async () => {
+      if (cancelled) return;
+      try {
+        const cleanId = normalizeRoomId(roomIdParam);
+        const res = await api.get(
+          `/api/rooms/user-status?username=${encodeURIComponent(user.username)}&targetRoomId=${encodeURIComponent(cleanId)}`
+        );
+        if (cancelled) return;
+        if (res.data?.inRoom) {
+          isBlockedRef.current = true;
+          toast.error(res.data.message || 'You cannot join this room at this time.', {
+            duration: 5000,
+            icon: '⚠️',
+          });
+          navigate('/dashboard');
+          return;
+        }
+      } catch (err) {
+        console.error('Error pre-checking room status in autoJoin:', err);
+      }
       if (!cancelled) initSocketConnection();
     }, 0);
     return () => {
       cancelled = true;
       clearTimeout(id);
     };
-  }, [roomIdParam, roomId, user, initSocketConnection]);
+  }, [roomIdParam, roomId, user, navigate, initSocketConnection]);
 
   // Handle language selection
   const handleLanguageSelect = useCallback(
@@ -652,15 +815,22 @@ const JoinRoom = () => {
     }
   };
 
-  // Go back to join page
+  // Go back to join page / dashboard
   const goBack = () => {
+    isLeavingRef.current = true;
     if (socketRef.current) {
+      if (user) {
+        socketRef.current.emit(ACTIONS.LEAVE, {
+          roomId,
+          username: user.username || "Anonymous",
+        });
+      }
       socketRef.current.disconnect();
     }
     setIsConnected(false);
     setClients([]);
     setValue("");
-    navigate("/dashboard");
+    navigate("/dashboard", { replace: true });
   };
 
   // Send chat message
@@ -688,14 +858,23 @@ const JoinRoom = () => {
 
   // Handle logout
   const handleLogout = () => {
-    if (socketRef.current && user) {
-      socketRef.current.emit(ACTIONS.LEAVE, {
-        roomId,
-        username: user.username || "Anonymous",
-      });
+    isLeavingRef.current = true;
+    sessionStorage.setItem('logging_out', 'true');
+    if (socketRef.current) {
+      if (user) {
+        socketRef.current.emit(ACTIONS.LEAVE, {
+          roomId,
+          username: user.username || "Anonymous",
+        });
+      }
+      socketRef.current.disconnect();
     }
+    setIsConnected(false);
+    setClients([]);
+    setValue("");
+    sessionStorage.setItem('isNewUser', 'false');
     logout();
-    navigate("/");
+    navigate("/", { replace: true });
   };
 
   // Cleanup on unmount
@@ -719,11 +898,26 @@ const JoinRoom = () => {
       if (editorRef.current) {
         removeAllRemoteCursors(editorRef.current);
       }
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+      }
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
     };
   }, []);
+
+  if (!isLeavingRef.current && isBlockedRef.current) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-gray-900 to-black">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-lg font-medium">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Arriving through a shared invite link: we already know the room, so show a
   // connecting screen rather than a form asking for an ID the user never typed.
@@ -928,38 +1122,6 @@ const JoinRoom = () => {
           )}
         </div>
 
-        {/* Room Info Section */}
-        {!sidebarCollapsed && (
-          <div className="p-4 border-b border-gray-700">
-            <div className="flex items-center mb-3">
-              <FiGlobe className="w-4 h-4 mr-2 text-indigo-400" />
-              <span className="font-medium text-sm">Room Info</span>
-            </div>
-            <div className="mb-4">
-              <div className="text-xs text-gray-400 mb-1">Room ID</div>
-              <div className="flex items-center space-x-2">
-                <code className="flex-1 px-2 py-1.5 bg-gray-900 rounded text-xs font-mono truncate">
-                  {roomId}
-                </code>
-                <button
-                  onClick={copyRoomId}
-                  className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-                  title="Copy Room ID"
-                >
-                  <FiCopy className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={shareRoom}
-              className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors text-sm"
-            >
-              <FiShare2 className="w-3.5 h-3.5" />
-              <span>Invite Others</span>
-            </button>
-          </div>
-        )}
-
         {/* Connected Users Section */}
         <div className="flex-1 p-4 overflow-y-auto">
           <div className="flex items-center mb-4">
@@ -1131,7 +1293,7 @@ const JoinRoom = () => {
               title="Logout"
             >
               <FiLogOut className="w-4 h-4" />
-              {!sidebarCollapsed && <span className="ml-1.5">Exit</span>}
+              {!sidebarCollapsed && <span className="ml-1.5">Logout</span>}
             </button>
           </div>
         </div>
@@ -1163,8 +1325,28 @@ const JoinRoom = () => {
                 {language.toUpperCase()}
               </span>
             </div>
-            <div className="text-sm text-gray-400">
-              Joined: {roomId.substring(0, 8)}...
+
+            {/* Room Info Section */}
+            <div className="flex items-center space-x-2 pl-3 border-l border-gray-700">
+              <div className="flex items-center text-xs text-gray-400 font-medium">
+                <FiGlobe className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+                <span className="hidden sm:inline">Room ID:</span>
+              </div>
+              <div className="flex items-center bg-gray-900 border border-gray-700 hover:border-gray-600 rounded px-2 py-1 space-x-2 transition-colors">
+                <code
+                  className="text-xs font-mono text-indigo-300 truncate max-w-[130px] md:max-w-[200px]"
+                  title={roomId}
+                >
+                  {roomId}
+                </code>
+                <button
+                  onClick={copyRoomId}
+                  className="text-gray-400 hover:text-white transition-colors p-0.5"
+                  title="Copy Room ID"
+                >
+                  <FiCopy className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -1173,7 +1355,7 @@ const JoinRoom = () => {
               className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded transition-colors text-sm"
             >
               <FiShare2 className="w-3.5 h-3.5" />
-              <span>Share</span>
+              <span>Share Room</span>
             </button>
             <div className="text-xs text-gray-400">
               <span className="text-green-400">●</span> {clients?.length || 0}{" "}

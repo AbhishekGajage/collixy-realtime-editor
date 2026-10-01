@@ -61,6 +61,7 @@ export const UserProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    sessionStorage.setItem('logging_out', 'true');
     try {
       await authAPI.logout();
     } catch (error) {
@@ -69,7 +70,11 @@ export const UserProvider = ({ children }) => {
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('user');
       setUser(null);
-      window.location.href = '/';
+      if (window.location.pathname !== '/') {
+        window.location.href = '/';
+      } else {
+        sessionStorage.removeItem('logging_out');
+      }
     }
   };
 

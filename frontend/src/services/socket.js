@@ -15,19 +15,30 @@ export const initSocket = async () => {
   const socket = io(socketUrl, options);
   
   return new Promise((resolve, reject) => {
+    let timer = null;
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
     socket.on('connect', () => {
       console.log('🔌 Socket connected:', socket.id);
+      cleanup();
       resolve(socket);
     });
     
     socket.on('connect_error', (error) => {
       console.error('❌ Socket connection error:', error);
+      cleanup();
       reject(error);
     });
     
     // Timeout after 10 seconds
-    setTimeout(() => {
+    timer = setTimeout(() => {
       if (!socket.connected) {
+        cleanup();
         reject(new Error('Connection timeout'));
         socket.disconnect();
       }

@@ -1,4 +1,5 @@
 // src/pages/LandingPage.jsx
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import headphones from '../assets/headphones.svg';
@@ -16,6 +17,10 @@ const LandingPage = () => {
   const { theme } = useTheme();
   const { user } = useUser();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    sessionStorage.removeItem('logging_out');
+  }, []);
 
   const features = [
     {

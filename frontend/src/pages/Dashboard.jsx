@@ -1,9 +1,9 @@
 // src/pages/Dashboard.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../Context/userContext.jsx';
 import { useTheme } from '../Context/useTheme';
-import collixy_logo from "../assets/collixy-logo.svg";
+import Navbar from '../components/common/Navbar';
 import headphones from '../assets/headphones.svg';
 import layout_dashboard from '../assets/layout-dashboard.svg';
 import shield_check from '../assets/shield-check.svg';
@@ -12,25 +12,18 @@ import vector from '../assets/Vector.svg';
 import code from '../assets/code.svg';
 import FeatureCard from '../components/common/FeatureCard';
 import Footer from '../components/common/Footer';
-import Switch from '../components/common/Switch';
+import api from '../services/api';
+import toast from 'react-hot-toast';
 
 const Dashboard = () => {
-  const { user, logout, loading } = useUser();
-  const { theme, toggleTheme } = useTheme();
+  const { user, loading } = useUser();
+  const { theme } = useTheme();
   const navigate = useNavigate();
   const [isNewUser] = useState(() => {
     // Initialize from sessionStorage immediately
     const storedIsNewUser = sessionStorage.getItem('isNewUser');
     return storedIsNewUser === 'true';
   });
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [avatarState, setAvatarState] = useState({
-    url: '',
-    loaded: false,
-    error: false
-  });
-  const userMenuRef = useRef(null);
-  const avatarCache = useRef({}); // Cache avatar URLs to avoid repeated requests
 
   const features = [
     {
@@ -65,163 +58,38 @@ const Dashboard = () => {
     }
   ];
 
-  // Memoized function to get avatar URL from user object
-  const getAvatarUrl = useCallback((userObj) => {
-    if (!userObj) return null;
-    
-    // Create cache key
-    const cacheKey = userObj.id || userObj.email || userObj.username || 'default';
-    
-    // Check cache first
-    if (avatarCache.current[cacheKey]) {
-      console.log('📦 Using cached avatar for:', cacheKey);
-      return avatarCache.current[cacheKey];
+  const handleCreateRoom = useCallback(async () => {
+    if (!user) {
+      // Navigate to login with return URL
+      navigate('/login', { 
+        state: { 
+          from: '/dashboard', 
+          message: 'Please login to create a room' 
+        } 
+      });
+      return;
     }
-    
-    let avatar = '';
-    
-    // Check for avatar in different possible locations
-    if (userObj.avatar) {
-      avatar = userObj.avatar;
-    } else if (userObj.profilePicture) {
-      avatar = userObj.profilePicture;
-    } else if (userObj.picture) {
-      avatar = userObj.picture;
-    } else if (userObj.googlePhotoUrl) {
-      avatar = userObj.googlePhotoUrl;
-    } else if (userObj.photoURL) {
-      avatar = userObj.photoURL;
-    } else if (userObj.image) {
-      avatar = userObj.image;
-    }
-    
-    // Fix Google avatar URL if needed
-    if (avatar && avatar.includes('googleusercontent.com')) {
-      // Remove size parameters to get default size (prevents 429 errors)
-      avatar = avatar.replace(/=s\d+(-c)?$/, '');
-      console.log('🔧 Processed Google avatar URL (removed size param):', avatar);
-    }
-    
-    // If no avatar found in user object, generate one locally without API
-    if (!avatar && userObj.username) {
-      // Generate avatar locally without external API call
-      const initial = userObj.username.charAt(0).toUpperCase();
-      console.log('🔄 Using local avatar for:', userObj.username);
-      avatar = 'local://' + initial; // Special marker for local avatar
-    } else if (!avatar) {
-      avatar = 'local://U'; // Default local avatar
-    }
-    
-    // Cache the result
-    avatarCache.current[cacheKey] = avatar;
-    
-    return avatar;
-  }, []);
 
-  // Update avatar state when user changes
-  useEffect(() => {
-    if (user) {
-      const newAvatarUrl = getAvatarUrl(user);
-      
-      // Only update if URL changed
-      if (newAvatarUrl !== avatarState.url) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setAvatarState({
-          url: newAvatarUrl,
-          loaded: false,
-          error: false
+    try {
+      const res = await api.get(`/api/rooms/user-status?username=${encodeURIComponent(user.username)}`);
+      if (res.data?.inRoom) {
+        toast.error(res.data.message || 'You are already in another room. Please leave that room first before creating a new one.', {
+          duration: 5000,
+          icon: '⚠️',
         });
+        return;
       }
+    } catch (err) {
+      console.error('Error checking room status:', err);
     }
-  }, [user, getAvatarUrl, avatarState.url]);
 
-  // Function to create colored avatar locally
-  const createLocalAvatar = useCallback((initial) => {
-    const colors = [
-      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
-      'bg-red-500', 'bg-yellow-500', 'bg-indigo-500', 'bg-teal-500'
-    ];
-    
-    // Use first letter of username or email to deterministically pick color
-    const hash = initial.charCodeAt(0);
-    const colorIndex = hash % colors.length;
-    
-    return {
-      color: colors[colorIndex],
-      initial: initial
-    };
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    // Clear isNewUser flag before logout
-    sessionStorage.setItem('isNewUser', 'false');
-    logout();
-    navigate('/');
-  }, [logout, navigate]);
-
-const handleCreateRoom = useCallback(() => {
-  if (user) {
-    // Navigate to room creation or dashboard
+    // Navigate to room creation
     navigate('/dashboard/room/create');
-  } else {
-    // Navigate to login with return URL
-    navigate('/login', { 
-      state: { 
-        from: '/dashboard', 
-        message: 'Please login to create a room' 
-      } 
-    });
-  }
-}, [navigate, user]);
+  }, [navigate, user]);
 
   const handleJoinRoom = useCallback(() => {
     navigate('/dashboard/room/join');
   }, [navigate]);
-
-  const handleAvatarError = useCallback((e) => {
-    console.log('❌ Avatar failed to load, using local fallback');
-    
-    // Mark as error
-    setAvatarState(prev => ({
-      ...prev,
-      error: true,
-      loaded: true
-    }));
-    
-    // Replace with local avatar
-    const parent = e.target.parentElement;
-    if (parent) {
-      const initial = user?.username?.charAt(0)?.toUpperCase() || 'U';
-      const localAvatar = createLocalAvatar(initial);
-      
-      parent.innerHTML = `
-        <div class="w-full h-full flex items-center justify-center ${localAvatar.color} text-white font-bold text-lg rounded-full">
-          ${initial}
-        </div>
-      `;
-    }
-  }, [user, createLocalAvatar]);
-
-  const handleAvatarLoad = useCallback(() => {
-    console.log('✅ Avatar loaded successfully');
-    setAvatarState(prev => ({
-      ...prev,
-      loaded: true,
-      error: false
-    }));
-  }, []);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
-        setShowUserMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Check authentication and handle isNewUser
   useEffect(() => {
@@ -243,12 +111,6 @@ const handleCreateRoom = useCallback(() => {
       }
     };
   }, [isNewUser]);
-
-  // Get local avatar info
-  const getLocalAvatarInfo = useCallback(() => {
-    const initial = user?.username?.charAt(0)?.toUpperCase() || 'U';
-    return createLocalAvatar(initial);
-  }, [user, createLocalAvatar]);
 
   if (loading) {
     return (
@@ -276,125 +138,14 @@ const handleCreateRoom = useCallback(() => {
     );
   }
 
-  // Determine what to display for avatar
-  const localAvatarInfo = getLocalAvatarInfo();
-  const displayInitial = user?.username?.charAt(0)?.toUpperCase() || 'U';
-  const isLocalAvatar = avatarState.url.startsWith('local://') || avatarState.error;
-
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${
       theme === 'dark' ? 'bg-gray-900' : 'bg-[#EDF1FE]'
     }`}>
-      {/* Header with Logo and User Avatar - Navbar Integration */}
-      <header className={`
-        w-screen h-fit fixed top-0 left-0 z-50 
-        backdrop-blur-2xl backdrop-saturate-180 
-        border-b transition-all duration-500 ease-out
-        ${
-          theme === "dark"
-            ? "bg-gray-900/40 text-white border-white/5 shadow-2xl shadow-black/40"
-            : "bg-white/30 text-black border-black/5 shadow-2xl shadow-black/5"
-        }
-        before:absolute before:inset-0 before:-z-10 
-        before:bg-linear-to-b 
-        ${
-          theme === "dark"
-            ? "before:from-gray-900/60 before:via-gray-900/40 before:to-transparent"
-            : "before:from-[#EDF1FE]/70 before:via-white/50 before:to-transparent"
-        }
-      `}>
-        <nav className="h-fit flex items-center justify-between px-4 md:px-6 lg:px-8 py-3">
-          {/* Logo */}
-          <div className="flex justify-start items-center h-16">
-            <img
-              src={collixy_logo}
-              alt="Collixy Logo"
-              className="h-50 w-auto object-contain transition-all duration-300 cursor-pointer"
-              onClick={() => navigate("/")}
-            />
-          </div>
+      {/* Universal Responsive Navbar */}
+      <Navbar />
 
-          {/* Right Menu */}
-          <div className="flex items-center gap-3 md:gap-4 lg:gap-5">
-            <h3 className="text-base md:text-lg lg:text-xl font-semibold cursor-pointer hover:opacity-80 transition-opacity">
-              About Us
-            </h3>
-
-            {/* User Avatar with Dropdown */}
-            <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-3 focus:outline-none group"
-              >
-                <div className="text-right hidden sm:block max-w-37.5">
-                  <p className={`cursor-pointer font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
-                    {user?.username || 'User'}
-                  </p>
-                  <p className={`cursor-pointer text-sm truncate ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {user?.email || ''}
-                  </p>
-                </div>
-                <div className="relative">
-                  <div className={`w-10 h-10 rounded-full border-2 border-blue-500 group-hover:border-blue-600 transition-colors overflow-hidden ${!avatarState.loaded ? 'bg-blue-100' : ''}`}>
-                    {!isLocalAvatar && avatarState.url && !avatarState.error ? (
-                      // Try to load external avatar
-                      <img
-                        src={avatarState.url}
-                        alt={user?.username || 'User'}
-                        className="w-full h-full object-cover cursor-pointer"
-                        onError={handleAvatarError}
-                        onLoad={handleAvatarLoad}
-                        loading="lazy"
-                        crossOrigin="anonymous"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      // Display local avatar (colored circle with initial)
-                      <div className={`cursor-pointer w-full h-full flex items-center justify-center ${localAvatarInfo.color} text-white font-bold text-lg`}>
-                        {displayInitial}
-                      </div>
-                    )}
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-                </div>
-              </button>
-
-              {/* User Menu Dropdown */}
-              {showUserMenu && (
-                <div className={`cursor-pointer absolute right-0 mt-2 w-64 rounded-xl shadow-lg py-2 z-50 ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
-                  <div className="px-4 py-3 border-b border-gray-700">
-                    <p className={`text-sm font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {user?.username || 'User'}
-                    </p>
-                    <p className={`text-sm truncate ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {user?.email || ''}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    className="cursor-pointer w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Theme Switch */}
-            <Switch isOn={theme === "dark"} onToggle={toggleTheme} />
-          </div>
-        </nav>
-      </header>
-
-      {/* User Menu Overlay (when clicking avatar) */}
-      {showUserMenu && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)}></div>
-      )}
-
-      <main className="grow pt-24">
+      <main className="grow pt-28 sm:pt-32">
         {/* Hero Section */}
         <section className={`
           relative

@@ -31,6 +31,8 @@ import { initSocket } from "../services/socket";
 import ACTIONS from "../utils/Actions";
 import { updateRemoteCursor, removeRemoteCursor, removeAllRemoteCursors, getLocalCursorPayload } from "../utils/remoteCursors";
 
+import api from "../services/api";
+
 // Import user context
 import { useUser } from '../Context/userContext';
 
@@ -46,6 +48,8 @@ const CreateRoom = () => {
   const contentDisposableRef = useRef(null);
   const cursorDisposableRef = useRef(null);
   const selectionDisposableRef = useRef(null);
+  const isBlockedRef = useRef(false);
+  const isLeavingRef = useRef(false);
 
   // State
   const [roomId, setRoomId] = useState("");
@@ -71,19 +75,19 @@ const CreateRoom = () => {
   }, []);
 
   // Initialize socket connection
-// Initialize socket connection
-useEffect(() => {
-  if (!roomId || !user) {
-    if (!user) {
-      navigate('/login', { 
-        state: { 
-          from: '/dashboard/room/create', 
-          message: 'Please login to create a room' 
-        } 
-      });
+  useEffect(() => {
+    if (isLeavingRef.current || sessionStorage.getItem('logging_out') === 'true') return;
+    if (!roomId || !user) {
+      if (!user && !isLeavingRef.current && sessionStorage.getItem('logging_out') !== 'true') {
+        navigate('/login', { 
+          state: { 
+            from: '/dashboard/room/create', 
+            message: 'Please login to create a room' 
+          } 
+        });
+      }
+      return;
     }
-    return;
-  }
 
   // `cancelled` + a local `socket` handle are what make this safe under
   // React StrictMode. The effect body is async, so on the first (discarded)
@@ -103,6 +107,23 @@ useEffect(() => {
     console.log('Room ID to create:', roomId);
     console.log('User:', user?.username || 'Anonymous');
     console.log('Is user logged in?', !!user);
+
+    // Pre-check if user is already in another room before connecting socket or creating room
+    try {
+      const res = await api.get(`/api/rooms/user-status?username=${encodeURIComponent(user.username)}`);
+      if (cancelled) return;
+      if (res.data?.inRoom) {
+        isBlockedRef.current = true;
+        toast.error(res.data.message || 'You are already in another room. Please leave that room first before creating a new one.', {
+          duration: 5000,
+          icon: '⚠️',
+        });
+        navigate('/dashboard');
+        return;
+      }
+    } catch (err) {
+      console.error('Error checking room status before create:', err);
+    }
 
     socket = await initSocket();
 
@@ -427,8 +448,68 @@ useEffect(() => {
       setIsLoading(false);
     });
 
+    // ========== LISTEN FOR USER_ALREADY_IN_ROOM EVENT ==========
+    socketRef.current.on(ACTIONS.USER_ALREADY_IN_ROOM, (data) => {
+      console.warn('⚠️ [FRONTEND] USER_ALREADY_IN_ROOM event received:', data);
+      isBlockedRef.current = true;
+      if (watchdogId) {
+        clearTimeout(watchdogId);
+        watchdogId = null;
+      }
+      toast.error(data.message || 'You are already in this room from another session.', {
+        duration: 5000,
+        icon: '⚠️',
+      });
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      navigate('/dashboard');
+    });
+
+    // ========== LISTEN FOR USER_ALREADY_IN_ANOTHER_ROOM EVENT ==========
+    socketRef.current.on(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, (data) => {
+      console.warn('⚠️ [FRONTEND] USER_ALREADY_IN_ANOTHER_ROOM event received:', data);
+      isBlockedRef.current = true;
+      if (watchdogId) {
+        clearTimeout(watchdogId);
+        watchdogId = null;
+      }
+      toast.error(data.message || 'You are already in another room. Please leave that room first before creating a new one.', {
+        duration: 5000,
+        icon: '⚠️',
+      });
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      navigate('/dashboard');
+    });
+
+    // ========== LISTEN FOR ROOM_CLOSED EVENT ==========
+    socketRef.current.on(ACTIONS.ROOM_CLOSED, (data) => {
+      console.warn('🚪 [FRONTEND] ROOM_CLOSED event received:', data);
+      if (isLeavingRef.current) return;
+      // Do not display "host closed the room" to the host themselves
+      if (data?.host && user?.username && data.host.toLowerCase() === user.username.toLowerCase()) {
+        return;
+      }
+      isBlockedRef.current = true;
+      if (watchdogId) {
+        clearTimeout(watchdogId);
+        watchdogId = null;
+      }
+      toast(data?.message || 'The host has closed the room.', {
+        duration: 4000,
+        icon: '🚪',
+      });
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      navigate('/dashboard', { replace: true });
+    });
+
     // ========== TIMEOUT CHECK ==========
     watchdogId = setTimeout(() => {
+      if (isBlockedRef.current || cancelled) return;
       console.log('⏰ [FRONTEND] 5-second timeout check:');
       console.log('   Is socket connected?', socketRef.current?.connected);
       console.log('   Still loading?', isLoading);
@@ -631,7 +712,17 @@ useEffect(() => {
 
   // Navigate to home
   const goToHome = () => {
-    navigate("/dashboard");
+    isLeavingRef.current = true;
+    if (socketRef.current) {
+      if (user) {
+        socketRef.current.emit(ACTIONS.LEAVE, { 
+          roomId, 
+          username: user.username || 'Anonymous' 
+        });
+      }
+      socketRef.current.disconnect();
+    }
+    navigate("/dashboard", { replace: true });
   };
 
   // Send chat message
@@ -652,22 +743,30 @@ useEffect(() => {
 
   // Handle logout
   const handleLogout = () => {
-    if (socketRef.current && user) {
-      socketRef.current.emit(ACTIONS.LEAVE, { 
-        roomId, 
-        username: user.username || 'Anonymous' 
-      });
+    isLeavingRef.current = true;
+    sessionStorage.setItem('logging_out', 'true');
+    if (socketRef.current) {
+      if (user) {
+        socketRef.current.emit(ACTIONS.LEAVE, { 
+          roomId, 
+          username: user.username || 'Anonymous' 
+        });
+      }
+      socketRef.current.disconnect();
     }
+    sessionStorage.setItem('isNewUser', 'false');
     logout();
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
-  if (isLoading) {
+  if (!isLeavingRef.current && (isLoading || isBlockedRef.current)) {
     return (
       <div className="flex items-center justify-center h-screen bg-linear-to-br from-gray-900 to-black">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-300">Creating collaborative room...</p>
+          <p className="mt-4 text-gray-300">
+            {isBlockedRef.current ? "Redirecting to dashboard..." : "Creating collaborative room..."}
+          </p>
           <p className="mt-2 text-sm text-gray-400">Room ID: {roomId.substring(0, 12)}...</p>
         </div>
       </div>
@@ -695,59 +794,6 @@ useEffect(() => {
             <p className="mt-2 text-sm text-gray-400">Collaborative Editor</p>
           )}
         </div>
-
-        {/* Room Info Section */}
-        {!sidebarCollapsed && (
-          <div className="p-4 border-b border-gray-700">
-            <div className="flex items-center mb-3">
-              <FiGlobe className="w-4 h-4 mr-2 text-indigo-400" />
-              <span className="font-medium text-sm">Room Info</span>
-            </div>
-            <div className="mb-4">
-              <div className="text-xs text-gray-400 mb-1">Room ID (Share with friends)</div>
-              <div className="flex items-center space-x-2">
-                <code className="flex-1 px-2 py-1.5 bg-gray-900 rounded text-xs font-mono truncate border border-indigo-500">
-                  {roomId}
-                </code>
-                <button
-                  onClick={copyRoomId}
-                  className="p-1.5 bg-indigo-600 hover:bg-indigo-700 rounded transition-colors"
-                  title="Copy Room ID to share"
-                >
-                  <FiCopy className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Share this ID with friends so they can join
-              </p>
-            </div>
-            <div className="mb-3">
-              <div className="text-xs text-gray-400 mb-1">Invite link</div>
-              <div className="flex items-center space-x-2">
-                <code className="flex-1 px-2 py-1.5 bg-gray-900 rounded text-xs font-mono truncate border border-gray-700">
-                  {inviteUrl}
-                </code>
-                <button
-                  onClick={copyInviteLink}
-                  className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-                  title="Copy the invite link"
-                >
-                  <FiCopy className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Opens straight into this room — no ID to paste
-              </p>
-            </div>
-            <button
-              onClick={shareRoom}
-              className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors text-sm"
-            >
-              <FiShare2 className="w-3.5 h-3.5" />
-              <span>Invite</span>
-            </button>
-          </div>
-        )}
 
         {/* Connected Users Section */}
         <div className="flex-1 p-4 overflow-y-auto">
@@ -890,7 +936,7 @@ useEffect(() => {
               title="Logout"
             >
               <FiLogOut className="w-4 h-4" />
-              {!sidebarCollapsed && <span className="ml-1.5">Exit</span>}
+              {!sidebarCollapsed && <span className="ml-1.5">Logout</span>}
             </button>
           </div>
         </div>
@@ -914,6 +960,29 @@ useEffect(() => {
               <span className="text-xs text-gray-300">
                 {language.toUpperCase()}
               </span>
+            </div>
+
+            {/* Room Info Section */}
+            <div className="flex items-center space-x-2 pl-3 border-l border-gray-700">
+              <div className="flex items-center text-xs text-gray-400 font-medium">
+                <FiGlobe className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+                <span className="hidden sm:inline">Room ID:</span>
+              </div>
+              <div className="flex items-center bg-gray-900 border border-gray-700 hover:border-gray-600 rounded px-2 py-1 space-x-2 transition-colors">
+                <code
+                  className="text-xs font-mono text-indigo-300 truncate max-w-[130px] md:max-w-[200px]"
+                  title={roomId}
+                >
+                  {roomId}
+                </code>
+                <button
+                  onClick={copyRoomId}
+                  className="text-gray-400 hover:text-white transition-colors p-0.5"
+                  title="Copy Room ID"
+                >
+                  <FiCopy className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">

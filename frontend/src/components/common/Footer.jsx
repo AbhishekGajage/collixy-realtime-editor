@@ -1,93 +1,86 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import logo from '../../assets/collixy-logo-icon.svg';
 import { useTheme } from "../../Context/useTheme";
+import SocialTooltip from './SocialTooltip';
 
 const Footer = () => {
+  const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
   const { theme } = useTheme();
+
+  const handleLinkClick = (path) => {
+    if (window.location.pathname === path) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      navigate(path);
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  };
 
   return (
     <footer className={`w-full py-6 ${theme === "dark" 
       ? "bg-gray-900 text-white" 
       : "bg-linear-to-b from-blue-50 to-white text-gray-800"
     }`}>
-      <div className="px-4 w-full">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-14 xl:px-16">
         {/* Main Footer Content */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-6">
           
           {/* Logo and Navigation */}
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="">
+            <div className="cursor-pointer" onClick={() => handleLinkClick('/')}>
               <img 
                 src={logo} 
                 alt="Collixy Logo" 
-                className="h-50 w-auto"
+                className="h-9 md:h-11 w-auto object-contain transition-transform hover:scale-105"
               />
             </div>
             
             {/* Navigation Links */}
             <div className="flex gap-4 md:gap-6">
-              <button className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap ${
-                theme === "dark" 
-                  ? "text-gray-300 hover:text-white" 
-                  : "text-gray-600 hover:text-gray-900"
-              }`}>
+              <button 
+                onClick={() => handleLinkClick('/about')}
+                className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap cursor-pointer ${
+                  theme === "dark" 
+                    ? "text-gray-300 hover:text-white" 
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                About Us
+              </button>
+              <button 
+                onClick={() => {
+                  if (window.location.pathname === '/') {
+                    const el = document.getElementById('features');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    navigate('/');
+                  }
+                }}
+                className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap cursor-pointer ${
+                  theme === "dark" 
+                    ? "text-gray-300 hover:text-white" 
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
                 Features
               </button>
-              <button className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap ${
-                theme === "dark" 
-                  ? "text-gray-300 hover:text-white" 
-                  : "text-gray-600 hover:text-gray-900"
-              }`}>
-                Learn More
-              </button>
-              <button className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap ${
-                theme === "dark" 
-                  ? "text-gray-300 hover:text-white" 
-                  : "text-gray-600 hover:text-gray-900"
-              }`}>
+              <button 
+                onClick={() => navigate('/login')}
+                className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap cursor-pointer ${
+                  theme === "dark" 
+                    ? "text-gray-300 hover:text-white" 
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
                 Support
               </button>
             </div>
           </div>
           
-          {/* Social Media Icons */}
-          <div className="flex gap-3">
-            {/* Twitter/X */}
-            <button className={`cursor-pointer transition-all duration-300 w-10 h-10 rounded-full flex items-center justify-center ${
-              theme === "dark" 
-                ? "bg-gray-800 hover:bg-gray-700" 
-                : "bg-blue-100 hover:bg-blue-200"
-            }`}>
-              <span className={`font-bold ${theme === "dark" ? "text-white" : "text-gray-700"}`}>
-                𝕏
-              </span>
-            </button>
-            
-            {/* LinkedIn */}
-            <button className={`cursor-pointer transition-all duration-300 w-10 h-10 rounded-full flex items-center justify-center ${
-              theme === "dark" 
-                ? "bg-gray-800 hover:bg-gray-700" 
-                : "bg-blue-100 hover:bg-blue-200"
-            }`}>
-              <span className={`font-bold ${theme === "dark" ? "text-white" : "text-blue-600"}`}>
-                in
-              </span>
-            </button>
-            
-            {/* GitHub */}
-            <button className={`cursor-pointer transition-all duration-300 w-10 h-10 rounded-full flex items-center justify-center ${
-              theme === "dark" 
-                ? "bg-gray-800 hover:bg-gray-700" 
-                : "bg-gray-100 hover:bg-gray-200"
-            }`}>
-              <span className={`font-bold ${theme === "dark" ? "text-white" : "text-gray-700"}`}>
-                ⎘
-              </span>
-            </button>
-            
-          
-          </div>
+          {/* Social Media Tooltip Icons */}
+          <SocialTooltip />
         </div>
         
         {/* Divider */}
@@ -108,18 +101,24 @@ const Footer = () => {
           
           {/* Additional Links */}
           <div className="flex gap-4 text-sm">
-            <button className={`transition-colors ${
-              theme === "dark" 
-                ? "text-gray-400 hover:text-gray-300" 
-                : "text-gray-500 hover:text-gray-700"
-            }`}>
+            <button 
+              onClick={() => handleLinkClick('/privacy')}
+              className={`transition-colors cursor-pointer ${
+                theme === "dark" 
+                  ? "text-gray-400 hover:text-gray-300" 
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
               Privacy Policy
             </button>
-            <button className={`transition-colors ${
-              theme === "dark" 
-                ? "text-gray-400 hover:text-gray-300" 
-                : "text-gray-500 hover:text-gray-700"
-            }`}>
+            <button 
+              onClick={() => handleLinkClick('/terms')}
+              className={`transition-colors cursor-pointer ${
+                theme === "dark" 
+                  ? "text-gray-400 hover:text-gray-300" 
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
               Terms of Service
             </button>
             <button className={`transition-colors ${

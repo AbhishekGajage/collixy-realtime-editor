@@ -40,6 +40,9 @@ const ACTIONS = {
     // Room Status
     ROOM_FULL: 'room-full',
     ROOM_NOT_FOUND: 'room-not-found',
+    ROOM_CLOSED: 'room-closed',
+    USER_ALREADY_IN_ROOM: 'user-already-in-room',
+    USER_ALREADY_IN_ANOTHER_ROOM: 'user-already-in-another-room',
     
     // Connection Health
     PING: 'ping',

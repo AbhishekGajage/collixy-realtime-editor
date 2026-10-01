@@ -73,6 +73,21 @@ const io = new Server(server, {
 const rooms = new Map();
 const users = new Map();
 
+// Helper: check if a username is already active in a DIFFERENT room.
+// Returns { roomId, user } if found, or null otherwise.
+function findUserInOtherRoom(username, targetRoomId) {
+  const normalized = (username || "").toLowerCase().trim();
+  for (const [rId, room] of rooms) {
+    if (rId === targetRoomId) continue; // same room is OK (handled separately)
+    for (const u of room.users.values()) {
+      if (u.username.toLowerCase().trim() === normalized && u.isOnline) {
+        return { roomId: rId, user: u };
+      }
+    }
+  }
+  return null;
+}
+
 // ========== SOCKET.IO CONNECTION HANDLING ==========
 io.on("connection", (socket) => {
   console.log(`✅ [BACKEND] New socket connection: ${socket.id}`);
@@ -102,6 +117,20 @@ io.on("connection", (socket) => {
           return;
         }
 
+        // Check if this user is already in a DIFFERENT room
+        const otherRoom = findUserInOtherRoom(username, roomId);
+        if (otherRoom) {
+          console.log(
+            `⚠️ [BACKEND] User "${username}" is already in room ${otherRoom.roomId} — must leave first`
+          );
+          socket.emit(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, {
+            roomId: otherRoom.roomId,
+            username,
+            message: `You are already in another room. Please leave that room first before creating a new one.`,
+          });
+          return;
+        }
+
         // Room already exists. This happens when a re-mounted effect emits
         // CREATE_ROOM twice, or when the creator returns after a refresh.
         // Erroring out used to leave this socket outside the socket.io room, so
@@ -119,6 +148,23 @@ io.on("connection", (socket) => {
               currentUsers: existing.users.size,
               maxUsers: existing.maxUsers || 10,
               message: "Room is full",
+            });
+            return;
+          }
+
+          // Check if a user with the same username is already in the room
+          const normalizedUsername = (username || "").toLowerCase().trim();
+          const existingUser = Array.from(existing.users.values()).find(
+            (u) => u.username.toLowerCase().trim() === normalizedUsername && u.isOnline
+          );
+          if (existingUser) {
+            console.log(
+              `⚠️ [BACKEND] User "${username}" is already in room ${roomId} — blocking duplicate`
+            );
+            socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+              roomId,
+              username,
+              message: `You are already in this room from another session. Please close the other tab first.`,
             });
             return;
           }
@@ -203,6 +249,7 @@ io.on("connection", (socket) => {
         const room = {
           id: roomId, // Use the ID from frontend
           host: socket.id,
+          hostUsername: user.username,
           code: typeof code === "string" ? code : "",
           language: language,
           users: new Map([[socket.id, user]]),
@@ -277,6 +324,20 @@ io.on("connection", (socket) => {
         return;
       }
 
+      // Check if this user is already in a DIFFERENT room
+      const otherRoom = findUserInOtherRoom(username, roomId);
+      if (otherRoom) {
+        console.log(
+          `⚠️ [BACKEND] User "${username}" is already in room ${otherRoom.roomId} — must leave first`
+        );
+        socket.emit(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, {
+          roomId: otherRoom.roomId,
+          username,
+          message: `You are already in another room. Please leave that room first before joining a new one.`,
+        });
+        return;
+      }
+
       // Check if room exists
       if (!rooms.has(roomId)) {
         console.log(`❌ [BACKEND] Room ${roomId} not found in rooms map`);
@@ -310,6 +371,23 @@ io.on("connection", (socket) => {
         isOnline: true,
         isHost: false
       };
+
+      // Check if a user with the same username is already in the room
+      const normalizedUsername = user.username.toLowerCase().trim();
+      const existingUser = Array.from(room.users.values()).find(
+        (u) => u.username.toLowerCase().trim() === normalizedUsername && u.isOnline
+      );
+      if (existingUser) {
+        console.log(
+          `⚠️ [BACKEND] User "${user.username}" is already in room ${roomId} — blocking duplicate`
+        );
+        socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+          roomId,
+          username: user.username,
+          message: `You are already in this room from another session. Please close the other tab first.`,
+        });
+        return;
+      }
 
       // Store user globally
       users.set(socket.id, {
@@ -621,6 +699,20 @@ io.on("connection", (socket) => {
 function handleLeave(socket, roomId, username) {
   try {
     if (!roomId) {
+      const u = users.get(socket.id);
+      if (u?.roomId) {
+        roomId = u.roomId;
+      } else {
+        for (const [rId, r] of rooms) {
+          if (r.users.has(socket.id)) {
+            roomId = rId;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!roomId) {
       console.log(`⚠️ [BACKEND] No roomId provided for leave event`);
       return;
     }
@@ -635,31 +727,51 @@ function handleLeave(socket, roomId, username) {
       const leavingUser = users.get(socket.id);
       const userName = username || leavingUser?.username || "Anonymous";
 
-      // Check if user exists in room
+      // Check if user is the host
+      const isHostLeaving =
+        room.host === socket.id ||
+        (leavingUser && leavingUser.isHost) ||
+        (room.hostUsername && userName && room.hostUsername.toLowerCase() === userName.toLowerCase());
+
+      if (isHostLeaving) {
+        console.log(
+          `👑❌ [BACKEND] Host "${userName}" left room ${roomId}. Closing and removing room for all participants.`
+        );
+
+        // Notify other users in this room that the host closed the room (not the host themselves)
+        socket.to(roomId).emit(ACTIONS.ROOM_CLOSED, {
+          roomId,
+          host: userName,
+          message: `${userName} (Host) has left and closed the room.`,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Clear room references from global users map and remove all sockets from room
+        for (const [memberSocketId] of room.users) {
+          if (users.has(memberSocketId)) {
+            const gUser = users.get(memberSocketId);
+            if (gUser) {
+              gUser.roomId = null;
+            }
+          }
+          const memberSocket = io.sockets.sockets.get(memberSocketId);
+          if (memberSocket) {
+            memberSocket.leave(roomId);
+          }
+        }
+
+        // Delete the room immediately
+        rooms.delete(roomId);
+        console.log(`🗑️ [BACKEND] Room ${roomId} deleted because host left`);
+        return;
+      }
+
+      // Check if user exists in room (non-host member)
       if (room.users.has(socket.id)) {
         // Remove user from room
         room.users.delete(socket.id);
         console.log(`✅ [BACKEND] Removed ${userName} from room ${roomId}`);
         console.log(`   Users left in room: ${room.users.size}`);
-
-        // Handle host transfer if host is leaving
-        if (room.host === socket.id && room.users.size > 0) {
-          // Transfer host to first available user
-          const newHostId = Array.from(room.users.keys())[0];
-          room.host = newHostId;
-          const newHost = room.users.get(newHostId);
-
-          console.log(`👑 [BACKEND] Transferred host to ${newHost?.username}`);
-
-          // Notify all users about new host
-          io.to(roomId).emit(ACTIONS.ROOM_USERS_UPDATED, {
-            roomId,
-            clients: Array.from(room.users.values()),
-            newHost: newHost?.username,
-            hostChanged: true,
-            timestamp: new Date().toISOString(),
-          });
-        }
 
         // If room is empty, delete it after a delay
         if (room.users.size === 0) {
@@ -888,6 +1000,52 @@ app.get("/api/socket/info", (req, res) => {
         language: room.language || "javascript",
       })),
     },
+  });
+});
+
+// Endpoint to check if a user is currently active in any room or in a target room
+app.get("/api/rooms/user-status", (req, res) => {
+  const username = req.query.username;
+  const targetRoomId = req.query.targetRoomId || null;
+  if (!username) {
+    return res.status(400).json({ success: false, error: "Username is required" });
+  }
+
+  // Check if user is in a different room
+  const otherRoom = findUserInOtherRoom(username, targetRoomId);
+  if (otherRoom) {
+    return res.json({
+      success: true,
+      inRoom: true,
+      inAnotherRoom: true,
+      roomId: otherRoom.roomId,
+      message: targetRoomId
+        ? "You are already in another room. Please leave that room first before joining a new one."
+        : "You are already in another room. Please leave that room first before creating a new one."
+    });
+  }
+
+  // If targetRoomId is provided, check if user is already in this same room
+  if (targetRoomId && rooms.has(targetRoomId)) {
+    const room = rooms.get(targetRoomId);
+    const normalizedUsername = (username || "").toLowerCase().trim();
+    const existingInRoom = Array.from(room.users.values()).find(
+      (u) => u.username.toLowerCase().trim() === normalizedUsername && u.isOnline
+    );
+    if (existingInRoom) {
+      return res.json({
+        success: true,
+        inRoom: true,
+        sameRoom: true,
+        roomId: targetRoomId,
+        message: "You are already in this room from another session. Please close the other tab first."
+      });
+    }
+  }
+
+  return res.json({
+    success: true,
+    inRoom: false
   });
 });
 

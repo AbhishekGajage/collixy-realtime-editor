@@ -24,6 +24,9 @@ const ProtectedRoute = ({ children }) => {
   // Redirect if not authenticated, remembering where they were headed so the
   // login page can send them back (e.g. a shared /room/:roomId invite link).
   if (!user) {
+    if (sessionStorage.getItem('logging_out') === 'true') {
+      return <Navigate to="/" replace />;
+    }
     return (
       <Navigate
         to="/login"
