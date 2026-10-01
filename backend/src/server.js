@@ -73,20 +73,12 @@ const io = new Server(server, {
 const rooms = new Map();
 const users = new Map();
 
-// Socket.io connection handling
-// Socket.io connection handling - COMPLETE FIXED VERSION
-// backend/src/server.js - UPDATED TO MATCH YOUR ACTIONS
-
-// ... (rest of your imports and setup remains the same)
-
 // ========== SOCKET.IO CONNECTION HANDLING ==========
-// backend/src/server.js
 io.on("connection", (socket) => {
   console.log(`✅ [BACKEND] New socket connection: ${socket.id}`);
   console.log(`   Origin: ${socket.handshake.headers.origin}`);
   console.log(`   User-Agent: ${socket.handshake.headers["user-agent"]}`);
 
-  // ========== CREATE ROOM ==========
   // ========== CREATE ROOM ==========
   socket.on(
     ACTIONS.CREATE_ROOM,
@@ -723,8 +715,6 @@ function handleLeave(socket, roomId, username) {
     console.error("❌ [BACKEND] Error in handleLeave:", error);
   }
 }
-
-// ... (rest of your Express setup and routes remain the same)
 
 // ========== EXPRESS MIDDLEWARE ==========
 app.use(morgan("dev"));

@@ -463,21 +463,7 @@ exports.register = async (req, res) => {
     await user.save();
     
     console.log('✅ User created successfully:', user.email);
-    sendTokenResponse(user, 201, res, true); // Pass true here
-
-    // Return success
-    return res.status(201).json({
-      success: true,
-      message: "Registration successful! Please login.",
-      isNewUser: true, // Add this flag
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        avatar: user.avatar
-      }
-    });
-
+    return sendTokenResponse(user, 201, res, true);
   } catch (error) {
     console.error("❌ Registration error:", error.message);
     console.error("❌ Error details:", error);

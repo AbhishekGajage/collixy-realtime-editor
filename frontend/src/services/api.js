@@ -189,39 +189,6 @@ export const register = async (userData) => {
   }
 };
 
-// Individual export for login function
-export const login = async (email, password) => {
-  try {
-    const response = await api.post('/api/auth/login', { email, password });
-    return response.data;
-  } catch (error) {
-    console.error('❌ Login API Error:', error);
-    throw error;
-  }
-};
-
-// Individual export for logout function  
-export const logout = async () => {
-  try {
-    const response = await api.post('/api/auth/logout');
-    return response.data;
-  } catch (error) {
-    console.error('❌ Logout API Error:', error);
-    throw error;
-  }
-};
-
-// Individual export for getCurrentUser function
-export const getCurrentUser = async () => {
-  try {
-    const response = await api.get('/api/auth/me');
-    return response.data;
-  } catch (error) {
-    console.error('❌ Get Current User API Error:', error);
-    throw error;
-  }
-};
-
 // Individual export for getGoogleAuthUrl function
 export const getGoogleAuthUrl = async () => {
   try {
@@ -230,19 +197,6 @@ export const getGoogleAuthUrl = async () => {
   } catch (error) {
     console.error('❌ Google Auth URL API Error:', error);
     throw error;
-  }
-};
-
-// Check available languages first — now proxied through our own backend,
-// which talks to a self-hosted Piston instance (see services/api.js note
-// above and backend/src/routes/execute.js).
-export const getAvailableLanguages = async () => {
-  try {
-    const response = await api.get("/api/execute/runtimes");
-    return response.data.runtimes || [];
-  } catch (error) {
-    console.error("Failed to fetch available languages:", error);
-    return [];
   }
 };
 
