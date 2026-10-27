@@ -63,12 +63,16 @@ const JoinRoom = () => {
   const isBlockedRef = useRef(false);
   const isLeavingRef = useRef(false);
 
+  const storedActiveRoom = sessionStorage.getItem('collixy_activeRoomId');
+  const storedRole = sessionStorage.getItem('collixy_activeRoomRole');
+  const initialRoomId = normalizeRoomId(roomIdParam) || (storedRole === 'participant' ? normalizeRoomId(storedActiveRoom) : '');
+
   // State
-  const [roomId, setRoomId] = useState(normalizeRoomId(roomIdParam));
+  const [roomId, setRoomId] = useState(initialRoomId);
   const [clients, setClients] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => Boolean(initialRoomId));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [joining, setJoining] = useState(false);
+  const [joining, setJoining] = useState(() => Boolean(initialRoomId));
   const [isConnected, setIsConnected] = useState(false);
 
   // Editor state
@@ -85,18 +89,25 @@ const JoinRoom = () => {
     languageRef.current = language;
   }, [language]);
 
-  // Check for pre-filled room ID from location state
+  // Check for pre-filled room ID from location state or active session
   useEffect(() => {
-    if (location.state?.roomId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (roomIdParam) {
+      setRoomId(normalizeRoomId(roomIdParam));
+    } else if (location.state?.roomId) {
       setRoomId(normalizeRoomId(location.state.roomId));
+    } else {
+      const active = sessionStorage.getItem('collixy_activeRoomId');
+      const role = sessionStorage.getItem('collixy_activeRoomRole');
+      if (active && role === 'participant') {
+        setRoomId(normalizeRoomId(active));
+      }
     }
-  }, [location.state]);
+  }, [roomIdParam, location.state]);
 
   // Initialize socket connection - COMPLETE FIXED VERSION
-  // Initialize socket connection - COMPLETE FIXED VERSION
-  const initSocketConnection = useCallback(async () => {
-    if (!roomId || !user) return;
+  const initSocketConnection = useCallback(async (customRoomId) => {
+    const cleanId = normalizeRoomId(customRoomId || roomId);
+    if (!cleanId || !user) return;
 
     const username = user.username || "Anonymous";
 
@@ -106,30 +117,6 @@ const JoinRoom = () => {
     joiningRef.current = true; // Update ref
 
     try {
-      // Pre-check room status before opening socket connection
-      try {
-        const cleanId = normalizeRoomId(roomId);
-        const res = await api.get(
-          `/api/rooms/user-status?username=${encodeURIComponent(username)}&targetRoomId=${encodeURIComponent(cleanId)}`
-        );
-        if (res.data?.inRoom) {
-          isBlockedRef.current = true;
-          toast.error(res.data.message || 'You cannot join this room at this time.', {
-            duration: 5000,
-            icon: '⚠️',
-          });
-          setIsLoading(false);
-          setJoining(false);
-          setIsConnected(false);
-          isLoadingRef.current = false;
-          joiningRef.current = false;
-          navigate('/dashboard');
-          return;
-        }
-      } catch (err) {
-        console.error('Error pre-checking room status before join:', err);
-      }
-
       socketRef.current = await initSocket();
       const currentUsername = username; // Store locally to avoid closure issues
 
@@ -167,12 +154,17 @@ const JoinRoom = () => {
           clearTimeout(watchdogRef.current);
           watchdogRef.current = null;
         }
-        toast.error("Room not found. Please check the Room ID.");
+        sessionStorage.removeItem('collixy_activeRoomId');
+        sessionStorage.removeItem('collixy_activeRoomRole');
+        toast.error("Room not found or has been closed. Please check the Room ID.");
         setIsLoading(false);
         setJoining(false);
         setIsConnected(false);
         isLoadingRef.current = false; // Update ref
         joiningRef.current = false; // Update ref
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
       });
 
       // Handle room full
@@ -238,6 +230,8 @@ const JoinRoom = () => {
       // Handle host closed room
       socketRef.current.on(ACTIONS.ROOM_CLOSED, (data) => {
         console.warn('🚪 [FRONTEND] Host closed the room:', data);
+        sessionStorage.removeItem('collixy_activeRoomId');
+        sessionStorage.removeItem('collixy_activeRoomRole');
         if (isLeavingRef.current || sessionStorage.getItem('logging_out') === 'true') return;
         isBlockedRef.current = true;
         if (watchdogRef.current) {
@@ -303,16 +297,23 @@ const JoinRoom = () => {
             }
           }
 
+          // Persist participant session
+          const activeId = normalizeRoomId(cleanId || roomId);
+          sessionStorage.setItem('collixy_activeRoomId', activeId);
+          sessionStorage.setItem('collixy_activeRoomRole', 'participant');
+
+          // Keep browser URL aligned to /room/:roomId so refresh always stays in room
+          if (window.location.pathname !== `/room/${activeId}`) {
+            window.history.replaceState(null, '', `/room/${activeId}`);
+          }
+
           setJoining(false);
           setIsLoading(false);
           setIsConnected(true);
           joiningRef.current = false; // Update ref
           isLoadingRef.current = false; // Update ref
           toast.success(
-            `Successfully joined room ${normalizeRoomId(roomId).substring(
-              0,
-              8
-            )}...`
+            `Successfully joined room ${activeId.substring(0, 8)}...`
           );
         }
       );
@@ -354,12 +355,12 @@ const JoinRoom = () => {
 
       // ========== EMIT JOIN EVENT ==========
       console.log("🚀 [FRONTEND-JOIN] Emitting JOIN event:", {
-        roomId,
+        roomId: cleanId,
         username: currentUsername,
       });
 
       socketRef.current.emit(ACTIONS.JOIN, {
-        roomId: normalizeRoomId(roomId),
+        roomId: cleanId,
         username: currentUsername,
       });
 
@@ -635,8 +636,8 @@ const JoinRoom = () => {
       const res = await api.get(
         `/api/rooms/user-status?username=${encodeURIComponent(user.username)}&targetRoomId=${encodeURIComponent(cleanId)}`
       );
-      if (res.data?.inRoom) {
-        toast.error(res.data.message || 'You cannot join this room at this time.', {
+      if (res.data?.inAnotherRoom) {
+        toast.error(res.data.message || 'You are already in another room. Please leave that room first.', {
           duration: 5000,
           icon: '⚠️',
         });
@@ -646,48 +647,23 @@ const JoinRoom = () => {
       console.error('Error pre-checking room status:', err);
     }
 
-    await initSocketConnection();
+    await initSocketConnection(cleanId);
   }, [roomId, user, navigate, initSocketConnection]);
 
-  // Arriving via a shared /room/:roomId invite link: join automatically instead
-  // of showing the paste-the-ID form.
+  // Arriving via a shared /room/:roomId invite link OR refreshing an active participant session:
+  // join automatically instead of showing the paste-the-ID form.
   useEffect(() => {
     if (isLeavingRef.current || sessionStorage.getItem('logging_out') === 'true') return;
     if (autoJoinedRef.current) return;
-    if (!roomIdParam || !user) return;
-    if (normalizeRoomId(roomId) !== normalizeRoomId(roomIdParam)) return;
+    const activeStoredId = sessionStorage.getItem('collixy_activeRoomId');
+    const activeStoredRole = sessionStorage.getItem('collixy_activeRoomRole');
+    const targetRoomId = normalizeRoomId(roomIdParam) || (activeStoredRole === 'participant' ? normalizeRoomId(activeStoredId) : '');
+
+    if (!targetRoomId || !user) return;
     autoJoinedRef.current = true;
 
-    // Deferred to a task so the connect (and its setState calls) happens after
-    // this render commits rather than synchronously inside the effect body.
-    let cancelled = false;
-    const id = setTimeout(async () => {
-      if (cancelled) return;
-      try {
-        const cleanId = normalizeRoomId(roomIdParam);
-        const res = await api.get(
-          `/api/rooms/user-status?username=${encodeURIComponent(user.username)}&targetRoomId=${encodeURIComponent(cleanId)}`
-        );
-        if (cancelled) return;
-        if (res.data?.inRoom) {
-          isBlockedRef.current = true;
-          toast.error(res.data.message || 'You cannot join this room at this time.', {
-            duration: 5000,
-            icon: '⚠️',
-          });
-          navigate('/dashboard');
-          return;
-        }
-      } catch (err) {
-        console.error('Error pre-checking room status in autoJoin:', err);
-      }
-      if (!cancelled) initSocketConnection();
-    }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
-  }, [roomIdParam, roomId, user, navigate, initSocketConnection]);
+    initSocketConnection(targetRoomId);
+  }, [roomIdParam, user, initSocketConnection]);
 
   // Handle language selection
   const handleLanguageSelect = useCallback(
@@ -818,6 +794,8 @@ const JoinRoom = () => {
   // Go back to join page / dashboard
   const goBack = () => {
     isLeavingRef.current = true;
+    sessionStorage.removeItem('collixy_activeRoomId');
+    sessionStorage.removeItem('collixy_activeRoomRole');
     if (socketRef.current) {
       if (user) {
         socketRef.current.emit(ACTIONS.LEAVE, {
@@ -859,6 +837,8 @@ const JoinRoom = () => {
   // Handle logout
   const handleLogout = () => {
     isLeavingRef.current = true;
+    sessionStorage.removeItem('collixy_activeRoomId');
+    sessionStorage.removeItem('collixy_activeRoomRole');
     sessionStorage.setItem('logging_out', 'true');
     if (socketRef.current) {
       if (user) {
@@ -919,18 +899,15 @@ const JoinRoom = () => {
     );
   }
 
-  // Arriving through a shared invite link: we already know the room, so show a
-  // connecting screen rather than a form asking for an ID the user never typed.
-  // (Without this, the `if (isLoading)` screen further down is unreachable,
-  // because the `if (!isConnected)` form below always returns first.)
-  if (!isConnected && roomIdParam && (isLoading || joining)) {
+  // Arriving through a shared invite link or reconnecting: show connecting screen
+  if (!isConnected && (roomIdParam || Boolean(sessionStorage.getItem('collixy_activeRoomId'))) && (isLoading || joining)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-gray-900 to-black">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-lg font-medium">Joining room…</p>
+          <p className="text-white text-lg font-medium">Reconnecting to collaborative room…</p>
           <p className="text-gray-400 text-sm mt-1">
-            {normalizeRoomId(roomIdParam)}
+            {normalizeRoomId(roomId || roomIdParam)}
           </p>
         </div>
       </div>

@@ -1,6 +1,6 @@
 // components/CreateRoom.jsx - COMPLETE FIXED VERSION
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { v4 as uuidV4 } from "uuid";
 import { toast } from "react-hot-toast";
 import { Editor } from "@monaco-editor/react";
@@ -38,6 +38,7 @@ import { useUser } from '../Context/userContext';
 
 const CreateRoom = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useUser();
   
   const socketRef = useRef(null);
@@ -66,13 +67,45 @@ const CreateRoom = () => {
   const [newMessage, setNewMessage] = useState("");
   const [showChat, setShowChat] = useState(false);
 
-  // Initialize room ID
+  // Initialize room ID & restored state from session history or refresh
   useEffect(() => {
-    const id = uuidV4();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRoomId(id);
-    console.log(`🏗️ Generated room ID: ${id}`);
-  }, []);
+    // 1. Check if reopening from session history
+    if (location.state?.reopenRoomId) {
+      const reopenId = location.state.reopenRoomId;
+      setRoomId(reopenId);
+      sessionStorage.setItem('collixy_activeRoomId', reopenId);
+      sessionStorage.setItem('collixy_activeRoomRole', 'host');
+      if (location.state.savedCode !== undefined) {
+        setValue(location.state.savedCode);
+        codeRef.current = location.state.savedCode;
+        if (editorRef.current) {
+          editorRef.current.setValue(location.state.savedCode);
+        }
+      }
+      if (location.state.savedLanguage) {
+        setLanguage(location.state.savedLanguage);
+        languageRef.current = location.state.savedLanguage;
+      }
+      console.log(`🔄 Reopening room ID: ${reopenId}`);
+      return;
+    }
+
+    // 2. Check if reconnecting after browser refresh
+    const activeRoomId = sessionStorage.getItem('collixy_activeRoomId');
+    const activeRole = sessionStorage.getItem('collixy_activeRoomRole');
+    if (activeRoomId && activeRole === 'host') {
+      setRoomId(activeRoomId);
+      console.log(`🔄 Restoring active room ID from session: ${activeRoomId}`);
+      return;
+    }
+
+    // 3. Otherwise generate a new room ID
+    const newId = uuidV4();
+    setRoomId(newId);
+    sessionStorage.setItem('collixy_activeRoomId', newId);
+    sessionStorage.setItem('collixy_activeRoomRole', 'host');
+    console.log(`🏗️ Generated new room ID: ${newId}`);
+  }, [location.state]);
 
   // Initialize socket connection
   useEffect(() => {
@@ -180,10 +213,14 @@ const CreateRoom = () => {
       console.log('🎉 [FRONTEND] ROOM_CREATED event received!');
       console.log('📊 Complete data received:', data);
       
+      const effectiveRoomId = data.roomId || roomId;
+      // Persist active room to sessionStorage
+      sessionStorage.setItem('collixy_activeRoomId', effectiveRoomId);
+      sessionStorage.setItem('collixy_activeRoomRole', 'host');
+
       // Check if roomId matches what we sent
       if (data.roomId && data.roomId !== roomId) {
         console.log(`🔄 Room ID updated from backend: ${data.roomId}`);
-        // Don't update roomId if we want to keep the UUID
       }
       
       // Create yourself as the first client
@@ -197,7 +234,7 @@ const CreateRoom = () => {
       setClients([userClient]);
       
       setIsLoading(false);
-      toast.success(`Room ${data.roomId ? data.roomId.substring(0, 8) : roomId.substring(0, 8)}... created!`);
+      toast.success(`Room ${effectiveRoomId.substring(0, 8)}... created!`);
       console.log('✅ Room creation process completed successfully!');
     });
 
@@ -208,6 +245,10 @@ const CreateRoom = () => {
       console.log('👤 [FRONTEND] JOINED event received:');
       console.log('   Complete data:', data);
       
+      const effectiveRoomId = data.roomId || roomId;
+      sessionStorage.setItem('collixy_activeRoomId', effectiveRoomId);
+      sessionStorage.setItem('collixy_activeRoomRole', 'host');
+
       // Handle clients
       if (data.clients && Array.isArray(data.clients)) {
         const formattedClients = data.clients.map(client => ({
@@ -224,23 +265,52 @@ const CreateRoom = () => {
         if (data.roomInfo.language) {
           console.log('🌐 Setting language from roomInfo:', data.roomInfo.language);
           setLanguage(data.roomInfo.language);
+          languageRef.current = data.roomInfo.language;
+        }
+        if (data.roomInfo.code !== undefined && data.roomInfo.code !== null && data.roomInfo.code !== '') {
+          console.log('📝 Setting code from roomInfo:', data.roomInfo.code.substring(0, 30));
+          setValue(data.roomInfo.code);
+          codeRef.current = data.roomInfo.code;
+          if (editorRef.current) {
+            editorRef.current.setValue(data.roomInfo.code);
+          }
         }
       }
       
       // Also check for direct code/language in data
-      if (data.code !== undefined) {
+      if (data.code !== undefined && data.code !== null && data.code !== '') {
         console.log('📝 Setting code from JOINED event');
-        setValue(data.code || '');
-        codeRef.current = data.code || '';
+        setValue(data.code);
+        codeRef.current = data.code;
+        if (editorRef.current) {
+          editorRef.current.setValue(data.code);
+        }
       }
       
       if (data.language) {
         console.log('🌐 Setting language from JOINED event:', data.language);
         setLanguage(data.language);
+        languageRef.current = data.language;
       }
       
       setIsLoading(false);
       console.log('✅ JOINED event processed successfully');
+    });
+
+    // ========== LISTEN FOR SYNC_CODE EVENT ==========
+    socketRef.current.on(ACTIONS.SYNC_CODE, ({ code, language: remoteLanguage }) => {
+      console.log('📥 [FRONTEND] SYNC_CODE received in CreateRoom:', { codeLength: code?.length, remoteLanguage });
+      if (remoteLanguage) {
+        setLanguage(remoteLanguage);
+        languageRef.current = remoteLanguage;
+      }
+      if (code !== undefined && code !== null) {
+        setValue(code);
+        codeRef.current = code;
+        if (editorRef.current) {
+          editorRef.current.setValue(code);
+        }
+      }
     });
 
     // ========== LISTEN FOR USER_JOINED EVENT ==========
@@ -497,6 +567,9 @@ const CreateRoom = () => {
         clearTimeout(watchdogId);
         watchdogId = null;
       }
+      // Clear session persistence since room is closed
+      sessionStorage.removeItem('collixy_activeRoomId');
+      sessionStorage.removeItem('collixy_activeRoomRole');
       toast(data?.message || 'The host has closed the room.', {
         duration: 4000,
         icon: '🚪',
@@ -713,6 +786,9 @@ const CreateRoom = () => {
   // Navigate to home
   const goToHome = () => {
     isLeavingRef.current = true;
+    // Clear session persistence — this is an explicit leave
+    sessionStorage.removeItem('collixy_activeRoomId');
+    sessionStorage.removeItem('collixy_activeRoomRole');
     if (socketRef.current) {
       if (user) {
         socketRef.current.emit(ACTIONS.LEAVE, { 
@@ -744,6 +820,9 @@ const CreateRoom = () => {
   // Handle logout
   const handleLogout = () => {
     isLeavingRef.current = true;
+    // Clear session persistence
+    sessionStorage.removeItem('collixy_activeRoomId');
+    sessionStorage.removeItem('collixy_activeRoomRole');
     sessionStorage.setItem('logging_out', 'true');
     if (socketRef.current) {
       if (user) {

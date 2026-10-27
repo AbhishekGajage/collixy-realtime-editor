@@ -11,6 +11,7 @@ import CreateRoom from './pages/CreateRoom.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { Toaster } from 'react-hot-toast';
 import JoinRoom from './pages/JoinRoom.jsx';
+import SessionDetail from './pages/SessionDetail.jsx';
 import AboutUs from './pages/AboutUs.jsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import TermsOfService from './pages/TermsOfService.jsx';
@@ -75,6 +76,11 @@ function App() {
             <Route path="/room/:roomId" element={
               <ProtectedRoute>
                 <JoinRoom />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/session/:id" element={
+              <ProtectedRoute>
+                <SessionDetail />
               </ProtectedRoute>
             } />
             <Route path="*" element={<Navigate to="/" />} />

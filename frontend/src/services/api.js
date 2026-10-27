@@ -238,4 +238,14 @@ export const executeCode = async (language, sourceCode, stdin = "") => {
   }
 };
 
+// Room session history API calls
+export const sessionsAPI = {
+  // Get all sessions for the authenticated user
+  getUserSessions: (page = 1, limit = 20) =>
+    api.get(`/api/sessions?page=${page}&limit=${limit}`),
+
+  // Get a single session detail by its ID
+  getSessionById: (id) => api.get(`/api/sessions/${id}`),
+};
+
 export default api;

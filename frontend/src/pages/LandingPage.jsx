@@ -63,13 +63,12 @@ const LandingPage = () => {
       navigate('/login');
     }
   };
-  
+
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-300 ${
-      theme === 'dark' ? 'bg-gray-900' : 'bg-[#EDF1FE]'
-    }`}>
+    <div className={`min-h-screen flex flex-col transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-900' : 'bg-[#EDF1FE]'
+      }`}>
       <Navbar onLoginClick={() => navigate('/login')} />
-      
+
       <main className="grow pt-16">
         {/* Hero Section */}
         <section className={`
@@ -79,8 +78,8 @@ const LandingPage = () => {
           text-center
           overflow-hidden
           transition-colors duration-300
-          ${theme === 'dark' 
-            ? 'bg-linear-to-br from-gray-900/50 to-blue-900/20' 
+          ${theme === 'dark'
+            ? 'bg-linear-to-br from-gray-900/50 to-blue-900/20'
             : 'bg-linear-to-br from-blue-50/50 to-purple-50/50'
           }
         `}>
@@ -92,7 +91,7 @@ const LandingPage = () => {
             bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImEiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHdpZHRoPSI3NSIgaGVpZ2h0PSI3NSIgcGF0dGVyblRyYW5zZm9ybT0icm90YXRlKDApIj48cGF0aCBkPSJNIDAgMCBMIDAgNzUgTCA3NSA3NSBMIDc1IDAgWiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDU5LCAxMzAsIDI0NiwgMC4wNSkiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNhKSIvPjwvc3ZnPg==')]
             animate-[moveBackground_20s_linear_infinite]
           " />
-          
+
           <div className="relative z-10 max-w-7xl mx-auto">
             <h1 className={`
               text-4xl sm:text-6xl md:text-7xl
@@ -107,7 +106,7 @@ const LandingPage = () => {
             `}>
               Code With Your Team Live
             </h1>
-            
+
             <p className={`
               text-xl md:text-2xl lg:text-2xl
               mb-10 md:mb-12 lg:mb-16
@@ -117,8 +116,8 @@ const LandingPage = () => {
             `}>
               Real-time collaborative coding platform for developers
             </p>
-            
-            <button 
+
+            <button
               onClick={handleGetStarted}
               className={`
                 relative
@@ -150,7 +149,7 @@ const LandingPage = () => {
                 transition-transform duration-1000
                 cursor-pointer
               " />
-              
+
               {user ? 'Go to Dashboard' : 'Get Started'}
             </button>
           </div>
@@ -189,7 +188,7 @@ const LandingPage = () => {
               `} />
             </h2>
           </div>
-          
+
           <div className="
             grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3
             gap-8 lg:gap-10
@@ -205,7 +204,7 @@ const LandingPage = () => {
             ))}
           </div>
         </section>
-        <Footer/>
+        <Footer />
       </main>
     </div>
   );

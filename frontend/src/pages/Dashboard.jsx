@@ -12,8 +12,18 @@ import vector from '../assets/Vector.svg';
 import code from '../assets/code.svg';
 import FeatureCard from '../components/common/FeatureCard';
 import Footer from '../components/common/Footer';
-import api from '../services/api';
+import api, { sessionsAPI } from '../services/api';
 import toast from 'react-hot-toast';
+import {
+  FiClock,
+  FiCode,
+  FiUsers,
+  FiUser,
+  FiCalendar,
+  FiArrowRight,
+  FiHash,
+  FiLoader,
+} from 'react-icons/fi';
 
 const Dashboard = () => {
   const { user, loading } = useUser();
@@ -24,6 +34,11 @@ const Dashboard = () => {
     const storedIsNewUser = sessionStorage.getItem('isNewUser');
     return storedIsNewUser === 'true';
   });
+
+  // Session history state
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState(null);
 
   const features = [
     {
@@ -58,6 +73,29 @@ const Dashboard = () => {
     }
   ];
 
+  // Fetch session history
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchSessions = async () => {
+      try {
+        setSessionsLoading(true);
+        setSessionsError(null);
+        const res = await sessionsAPI.getUserSessions(1, 50);
+        if (res.data.success) {
+          setSessions(res.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch sessions:', err);
+        setSessionsError('Failed to load session history');
+      } finally {
+        setSessionsLoading(false);
+      }
+    };
+
+    fetchSessions();
+  }, [user]);
+
   const handleCreateRoom = useCallback(async () => {
     if (!user) {
       // Navigate to login with return URL
@@ -75,7 +113,7 @@ const Dashboard = () => {
       if (res.data?.inRoom) {
         toast.error(res.data.message || 'You are already in another room. Please leave that room first before creating a new one.', {
           duration: 5000,
-          icon: '⚠️',
+          
         });
         return;
       }
@@ -97,7 +135,7 @@ const Dashboard = () => {
       const token = sessionStorage.getItem('accessToken');
       
       if (!user && !token) {
-        console.log('🚫 No user or token, redirecting to login');
+        console.log('No user or token, redirecting to login');
         navigate('/login');
       }
     }
@@ -112,14 +150,59 @@ const Dashboard = () => {
     };
   }, [isNewUser]);
 
+  // Helper formatters
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatDuration = (ms) => {
+    if (!ms) return '-';
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m`;
+    return `< 1m`;
+  };
+
+  const languageColors = {
+    javascript: { bg: 'from-yellow-400 to-orange-500', text: 'JS' },
+    typescript: { bg: 'from-blue-400 to-blue-600', text: 'TS' },
+    python: { bg: 'from-green-400 to-blue-500', text: 'PY' },
+    java: { bg: 'from-red-400 to-red-600', text: 'JV' },
+    cpp: { bg: 'from-blue-500 to-indigo-600', text: 'C++' },
+    c: { bg: 'from-gray-400 to-gray-600', text: 'C' },
+    go: { bg: 'from-cyan-400 to-cyan-600', text: 'GO' },
+    rust: { bg: 'from-orange-400 to-red-500', text: 'RS' },
+    php: { bg: 'from-indigo-400 to-purple-500', text: 'PHP' },
+    ruby: { bg: 'from-red-400 to-pink-500', text: 'RB' },
+  };
+
+  const isDark = theme === 'dark';
+
   if (loading) {
     return (
       <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${
-        theme === 'dark' ? 'bg-gray-900' : 'bg-[#EDF1FE]'
+        isDark ? 'bg-gray-900' : 'bg-[#EDF1FE]'
       }`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className={`mt-4 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Loading dashboard...</p>
+          <p className={`mt-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Loading dashboard...</p>
         </div>
       </div>
     );
@@ -128,11 +211,11 @@ const Dashboard = () => {
   if (!user) {
     return (
       <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${
-        theme === 'dark' ? 'bg-gray-900' : 'bg-[#EDF1FE]'
+        isDark ? 'bg-gray-900' : 'bg-[#EDF1FE]'
       }`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className={`mt-4 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Verifying authentication...</p>
+          <p className={`mt-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Verifying authentication...</p>
         </div>
       </div>
     );
@@ -140,7 +223,7 @@ const Dashboard = () => {
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${
-      theme === 'dark' ? 'bg-gray-900' : 'bg-[#EDF1FE]'
+      isDark ? 'bg-gray-900' : 'bg-[#EDF1FE]'
     }`}>
       {/* Universal Responsive Navbar */}
       <Navbar />
@@ -154,7 +237,7 @@ const Dashboard = () => {
           text-center
           overflow-hidden
           transition-colors duration-300
-          ${theme === 'dark' 
+          ${isDark 
             ? 'bg-linear-to-br from-gray-900/50 to-blue-900/20' 
             : 'bg-linear-to-br from-blue-50/50 to-purple-50/50'
           }
@@ -166,12 +249,12 @@ const Dashboard = () => {
               mb-6 md:mb-8
               leading-tight
               bg-clip-text text-transparent
-              ${theme === 'dark'
+              ${isDark
                 ? 'bg-linear-to-r from-blue-400 via-purple-400 to-blue-400'
                 : 'bg-linear-to-r from-blue-600 via-purple-600 to-blue-600'
               }
             `}>
-              {isNewUser ? `Welcome to Collixy, ${user.username}! 🎉` : `Welcome back, ${user.username}! 👋`}
+              {isNewUser ? `Welcome to Collixy, ${user.username}!` : `Welcome back, ${user.username}!`}
             </h1>
             
             <p className={`
@@ -179,7 +262,7 @@ const Dashboard = () => {
               mb-12 md:mb-16
               max-w-3xl mx-auto
               leading-relaxed
-              ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}
+              ${isDark ? 'text-gray-300' : 'text-gray-600'}
             `}>
               Ready to collaborate with your team in real-time? Start a new session or join an existing one.
             </p>
@@ -204,7 +287,7 @@ const Dashboard = () => {
                   overflow-hidden
                   cursor-pointer
                   w-full sm:w-auto min-w-50
-                  ${theme === 'dark'
+                  ${isDark
                     ? 'bg-linear-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 hover:shadow-blue-500/40'
                     : 'bg-linear-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 hover:shadow-blue-500/40'
                   }
@@ -246,7 +329,7 @@ const Dashboard = () => {
                   cursor-pointer
                   border-2
                   w-full sm:w-auto min-w-50
-                  ${theme === 'dark'
+                  ${isDark
                     ? 'border-blue-400 text-white hover:bg-blue-600/20 hover:shadow-blue-500/40'
                     : 'border-blue-600 text-blue-600 hover:bg-blue-50 hover:shadow-blue-500/40'
                   }
@@ -273,6 +356,234 @@ const Dashboard = () => {
           </div>
         </section>
 
+        {/* ========== SESSION HISTORY SECTION ========== */}
+        <section className={`
+          px-4 sm:px-6 lg:px-8
+          py-16 md:py-20
+          max-w-7xl
+          mx-auto
+          transition-colors duration-300
+        `}>
+          <div className="text-center mb-10 md:mb-14">
+            <h2 className={`
+              text-2xl sm:text-3xl md:text-4xl
+              font-extrabold
+              mb-3
+              relative
+              inline-block
+              ${isDark ? 'text-white' : 'text-gray-800'}
+            `}>
+              Your Session History
+              <span className={`
+                absolute
+                -bottom-3
+                left-1/2
+                transform -translate-x-1/2
+                w-20 h-1.5 md:w-28 md:h-2
+                rounded-full
+                ${isDark
+                  ? 'bg-linear-to-r from-blue-400 to-purple-400'
+                  : 'bg-linear-to-r from-blue-600 to-purple-600'
+                }
+              `} />
+            </h2>
+            <p className={`
+              mt-6 text-base md:text-lg max-w-2xl mx-auto
+              ${isDark ? 'text-gray-400' : 'text-gray-500'}
+            `}>
+              View your past coding sessions. Click on any session to see the full code snapshot and details.
+            </p>
+          </div>
+
+          {/* Loading state */}
+          {sessionsLoading && (
+            <div className="flex justify-center items-center py-16">
+              <FiLoader className={`w-8 h-8 animate-spin ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+              <span className={`ml-3 text-lg ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                Loading sessions...
+              </span>
+            </div>
+          )}
+
+          {/* Error state */}
+          {sessionsError && !sessionsLoading && (
+            <div className={`text-center py-16 rounded-2xl ${
+              isDark ? 'bg-red-900/10 text-red-400' : 'bg-red-50 text-red-500'
+            }`}>
+              <p className="text-lg">{sessionsError}</p>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!sessionsLoading && !sessionsError && sessions.length === 0 && (
+            <div className={`
+              text-center py-20 rounded-2xl border-2 border-dashed
+              ${isDark
+                ? 'border-gray-700 bg-gray-800/30'
+                : 'border-gray-200 bg-white/40'
+              }
+            `}>
+              <div className={`flex justify-center mb-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}><FiCode className="w-12 h-12" /></div>
+              <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                No sessions yet
+              </h3>
+              <p className={`text-base ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                Create or join a room to start your first coding session!
+              </p>
+            </div>
+          )}
+
+          {/* Session Cards Grid */}
+          {!sessionsLoading && !sessionsError && sessions.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sessions.map((session) => {
+                const langInfo = languageColors[session.language] || {
+                  bg: 'from-gray-400 to-gray-600',
+                  text: session.language?.substring(0, 3).toUpperCase() || '?',
+                };
+
+                return (
+                  <button
+                    key={session._id}
+                    onClick={() => navigate(`/dashboard/session/${session._id}`)}
+                    className={`
+                      group
+                      relative
+                      text-left
+                      rounded-2xl
+                      p-5 sm:p-6
+                      border
+                      backdrop-blur-sm
+                      transition-all duration-300
+                      hover:-translate-y-1
+                      hover:shadow-xl
+                      cursor-pointer
+                      overflow-hidden
+                      ${isDark
+                        ? 'bg-gray-800/60 border-gray-700/50 hover:border-blue-500/40 hover:shadow-blue-500/10'
+                        : 'bg-white/80 border-gray-200/50 hover:border-blue-400/40 hover:shadow-blue-500/10'
+                      }
+                    `}
+                  >
+                    {/* Shimmer effect */}
+                    <span className="
+                      absolute inset-0
+                      bg-linear-to-r from-transparent via-white/5 to-transparent
+                      -translate-x-full
+                      group-hover:translate-x-full
+                      transition-transform duration-700
+                      pointer-events-none
+                    " />
+
+                    {/* Top row: language badge + status */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className={`
+                        inline-flex items-center justify-center
+                        w-10 h-10 rounded-xl
+                        text-white text-xs font-bold
+                        bg-gradient-to-br ${langInfo.bg}
+                        shadow-lg
+                      `}>
+                        {langInfo.text}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`
+                          inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider
+                          ${session.role === 'host'
+                            ? isDark
+                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                              : 'bg-amber-50 text-amber-600 border border-amber-200'
+                            : isDark
+                              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
+                              : 'bg-blue-50 text-blue-600 border border-blue-200'
+                          }
+                        `}>
+                          {session.role === 'host' ? 'Host' : 'Joined'}
+                        </span>
+                        <span className={`
+                          w-2 h-2 rounded-full
+                          ${session.status === 'active'
+                            ? 'bg-green-400 shadow-green-400/50 shadow-sm animate-pulse'
+                            : isDark ? 'bg-gray-500' : 'bg-gray-300'
+                          }
+                        `} />
+                      </div>
+                    </div>
+
+                    {/* Room ID */}
+                    <div className="mb-3">
+                      <div className={`flex items-center gap-1.5 text-xs font-medium mb-1 ${
+                        isDark ? 'text-gray-500' : 'text-gray-400'
+                      }`}>
+                        <FiHash className="w-3 h-3" />
+                        Room ID
+                      </div>
+                      <p className={`text-sm font-mono truncate ${
+                        isDark ? 'text-gray-300' : 'text-gray-700'
+                      }`}>
+                        {session.roomId}
+                      </p>
+                    </div>
+
+                    {/* Host */}
+                    <div className="mb-4">
+                      <div className={`flex items-center gap-1.5 text-xs font-medium mb-1 ${
+                        isDark ? 'text-gray-500' : 'text-gray-400'
+                      }`}>
+                        <FiUser className="w-3 h-3" />
+                        Host
+                      </div>
+                      <p className={`text-sm font-semibold ${
+                        isDark ? 'text-gray-200' : 'text-gray-800'
+                      }`}>
+                        {session.hostUsername}
+                      </p>
+                    </div>
+
+                    {/* Info chips */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <span className={`
+                        inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium
+                        ${isDark ? 'bg-gray-700/60 text-gray-300' : 'bg-gray-100 text-gray-600'}
+                      `}>
+                        <FiUsers className="w-3 h-3" />
+                        {session.participantCount} {session.participantCount === 1 ? 'user' : 'users'}
+                      </span>
+                      {session.duration && (
+                        <span className={`
+                          inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium
+                          ${isDark ? 'bg-gray-700/60 text-gray-300' : 'bg-gray-100 text-gray-600'}
+                        `}>
+                          <FiClock className="w-3 h-3" />
+                          {formatDuration(session.duration)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Bottom: date + arrow */}
+                    <div className="flex items-center justify-between pt-3 border-t border-dashed"
+                      style={{ borderColor: isDark ? 'rgba(75,85,99,0.4)' : 'rgba(209,213,219,0.6)' }}
+                    >
+                      <div className={`flex items-center gap-1.5 text-xs ${
+                        isDark ? 'text-gray-400' : 'text-gray-500'
+                      }`}>
+                        <FiCalendar className="w-3 h-3" />
+                        {formatDate(session.createdAt)} • {formatTime(session.createdAt)}
+                      </div>
+                      <FiArrowRight className={`
+                        w-4 h-4
+                        transition-transform duration-300
+                        group-hover:translate-x-1
+                        ${isDark ? 'text-blue-400' : 'text-blue-600'}
+                      `} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         {/* Features Section */}
         <section className={`
           px-4 sm:px-6 lg:px-8
@@ -280,7 +591,7 @@ const Dashboard = () => {
           max-w-7xl
           mx-auto
           transition-colors duration-300
-          ${theme === 'dark' ? 'text-white' : ''}
+          ${isDark ? 'text-white' : ''}
         `}>
           <div className="text-center mb-16 md:mb-20 lg:mb-24">
             <h2 className={`
@@ -289,7 +600,7 @@ const Dashboard = () => {
               mb-6 md:mb-8
               relative
               inline-block
-              ${theme === 'dark' ? 'text-white' : 'text-gray-800'}
+              ${isDark ? 'text-white' : 'text-gray-800'}
             `}>
               Everything You Need to Code Together
               <span className={`
@@ -299,7 +610,7 @@ const Dashboard = () => {
                 transform -translate-x-1/2
                 w-24 h-1.5 md:w-32 md:h-2
                 rounded-full
-                ${theme === 'dark'
+                ${isDark
                   ? 'bg-linear-to-r from-blue-400 to-purple-400'
                   : 'bg-linear-to-r from-blue-600 to-purple-600'
                 }

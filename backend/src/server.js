@@ -20,6 +20,9 @@ const morgan = require("morgan");
 const http = require("http");
 const { Server } = require("socket.io");
 const ACTIONS = require("./utils/Actions");
+const RoomSession = require("./models/RoomSession");
+const User = require("./models/User");
+const { encrypt } = require("./utils/encryption");
 const app = express();
 app.set("trust proxy", 1);
 
@@ -72,6 +75,7 @@ const io = new Server(server, {
 // Store active rooms and users
 const rooms = new Map();
 const users = new Map();
+const disconnectTimers = new Map(); // socketId -> { timerId, roomId, username }
 
 // Helper: check if a username is already active in a DIFFERENT room.
 // Returns { roomId, user } if found, or null otherwise.
@@ -97,7 +101,7 @@ io.on("connection", (socket) => {
   // ========== CREATE ROOM ==========
   socket.on(
     ACTIONS.CREATE_ROOM,
-    ({ roomId, username, language = "javascript", code = "" }) => {
+    async ({ roomId, username, language = "javascript", code = "" }) => {
       try {
         console.log(`🏗️ [BACKEND] CREATE_ROOM event received`);
         console.log(`   Room ID from client: ${roomId}`);
@@ -154,23 +158,85 @@ io.on("connection", (socket) => {
 
           // Check if a user with the same username is already in the room
           const normalizedUsername = (username || "").toLowerCase().trim();
-          const existingUser = Array.from(existing.users.values()).find(
-            (u) => u.username.toLowerCase().trim() === normalizedUsername && u.isOnline
+
+          // Reconnection check: if user with same username is already in room (offline or replacing stale socket)
+          const existingInRoom = Array.from(existing.users.values()).find(
+            (u) => u.username.toLowerCase().trim() === normalizedUsername
           );
-          if (existingUser) {
-            console.log(
-              `⚠️ [BACKEND] User "${username}" is already in room ${roomId} — blocking duplicate`
-            );
-            socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+          if (existingInRoom) {
+            // Reconnection! Cancel grace period timer and swap socket ID
+            const oldSocketId = existingInRoom.id;
+            const timerEntry = disconnectTimers.get(oldSocketId);
+            if (timerEntry) {
+              clearTimeout(timerEntry.timerId);
+              disconnectTimers.delete(oldSocketId);
+            }
+
+            if (oldSocketId && oldSocketId !== socket.id) {
+              const oldSocket = io.sockets.sockets.get(oldSocketId);
+              if (oldSocket) {
+                console.log(`🔌 [BACKEND] Disconnecting superseded socket ${oldSocketId} for host ${username}`);
+                oldSocket.disconnect(true);
+              }
+              existing.users.delete(oldSocketId);
+              users.delete(oldSocketId);
+            }
+
+            existingInRoom.id = socket.id;
+            existingInRoom.isOnline = true;
+            existingInRoom.disconnectedAt = null;
+
+            users.set(socket.id, { ...existingInRoom, roomId });
+            socket.join(roomId);
+            existing.users.set(socket.id, existingInRoom);
+            if (existingInRoom.isHost) existing.host = socket.id;
+
+            const existingUsers = Array.from(existing.users.values()).filter(u => u.isOnline);
+            console.log(`🔄 [BACKEND] ${username} reconnected to room ${roomId} (host: ${existingInRoom.isHost})`);
+
+            socket.emit(ACTIONS.ROOM_CREATED, {
               roomId,
-              username,
-              message: `You are already in this room from another session. Please close the other tab first.`,
+              user: existingInRoom,
+              message: `Reconnected to room ${roomId}`,
+              createdAt: existing.createdAt,
+              timestamp: new Date().toISOString(),
+            });
+            socket.emit(ACTIONS.JOINED, {
+              roomId,
+              user: existingInRoom,
+              clients: existingUsers,
+              roomInfo: {
+                roomId,
+                totalUsers: existingUsers.length,
+                createdAt: existing.createdAt,
+                language: existing.language || "javascript",
+                host: existing.users.get(existing.host)?.username || "Unknown",
+                code: existing.code || "",
+              },
+            });
+            socket.emit(ACTIONS.SYNC_CODE, {
+              code: existing.code || "",
+              language: existing.language || "javascript",
+              lastUpdated: existing.lastUpdated,
+            });
+            socket.to(roomId).emit(ACTIONS.USER_JOINED, {
+              user: existingInRoom,
+              timestamp: new Date().toISOString(),
+              totalUsers: existingUsers.length,
+            });
+            io.to(roomId).emit(ACTIONS.ROOM_USERS_UPDATED, {
+              roomId,
+              clients: existingUsers,
+              userJoined: existingInRoom.username,
+              totalUsers: existingUsers.length,
+              timestamp: new Date().toISOString(),
             });
             return;
           }
 
           // If everyone left, whoever comes back becomes the host.
-          const becomesHost = existing.users.size === 0;
+          const onlineCount = Array.from(existing.users.values()).filter(u => u.isOnline).length;
+          const becomesHost = onlineCount === 0;
           const rejoiningUser = {
             id: socket.id,
             username: username || `User-${socket.id.substring(0, 5)}`,
@@ -184,7 +250,7 @@ io.on("connection", (socket) => {
           socket.join(roomId);
           existing.users.set(socket.id, rejoiningUser);
 
-          const existingUsers = Array.from(existing.users.values());
+          const existingUsers = Array.from(existing.users.values()).filter(u => u.isOnline);
 
           if (!existing.code && code) {
             existing.code = code;
@@ -266,6 +332,33 @@ io.on("connection", (socket) => {
         console.log(`✅ [BACKEND] Room created: ${roomId} by ${user.username}`);
         console.log(`   Users in room: ${room.users.size}`);
         console.log(`   All rooms now:`, Array.from(rooms.keys()));
+
+        // ========== PERSIST SESSION TO DB ==========
+        try {
+          // Look up the host user in the database by username
+          const hostUser = await User.findOne({ username: user.username });
+          if (hostUser) {
+            const session = new RoomSession({
+              roomId,
+              hostUserId: hostUser._id,
+              hostUsername: user.username,
+              language: language,
+              participants: [{
+                userId: hostUser._id,
+                username: user.username,
+                joinedAt: new Date(),
+              }],
+              status: 'active',
+            });
+            await session.save();
+            room.sessionId = session._id;
+            console.log(`💾 [BACKEND] Session ${session._id} persisted for room ${roomId}`);
+          } else {
+            console.warn(`⚠️ [BACKEND] Host user "${user.username}" not found in DB — session not persisted`);
+          }
+        } catch (dbErr) {
+          console.error('❌ [BACKEND] Failed to persist session:', dbErr.message);
+        }
 
         // Send room created event back to creator
         socket.emit(ACTIONS.ROOM_CREATED, {
@@ -372,19 +465,70 @@ io.on("connection", (socket) => {
         isHost: false
       };
 
-      // Check if a user with the same username is already in the room
+      // Reconnection check: if user with same username is already in room (offline or replacing stale socket)
       const normalizedUsername = user.username.toLowerCase().trim();
-      const existingUser = Array.from(room.users.values()).find(
-        (u) => u.username.toLowerCase().trim() === normalizedUsername && u.isOnline
+      const existingInRoom = Array.from(room.users.values()).find(
+        (u) => u.username.toLowerCase().trim() === normalizedUsername
       );
-      if (existingUser) {
-        console.log(
-          `⚠️ [BACKEND] User "${user.username}" is already in room ${roomId} — blocking duplicate`
-        );
-        socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+      if (existingInRoom) {
+        // Reconnection! Cancel grace period timer and swap socket ID
+        const oldSocketId = existingInRoom.id;
+        const timerEntry = disconnectTimers.get(oldSocketId);
+        if (timerEntry) {
+          clearTimeout(timerEntry.timerId);
+          disconnectTimers.delete(oldSocketId);
+        }
+
+        if (oldSocketId && oldSocketId !== socket.id) {
+          const oldSocket = io.sockets.sockets.get(oldSocketId);
+          if (oldSocket) {
+            console.log(`🔌 [BACKEND] Disconnecting superseded socket ${oldSocketId} for participant ${user.username}`);
+            oldSocket.disconnect(true);
+          }
+          room.users.delete(oldSocketId);
+          users.delete(oldSocketId);
+        }
+
+        existingInRoom.id = socket.id;
+        existingInRoom.isOnline = true;
+        existingInRoom.disconnectedAt = null;
+
+        users.set(socket.id, { ...existingInRoom, roomId });
+        socket.join(roomId);
+        room.users.set(socket.id, existingInRoom);
+
+        const roomUsers = Array.from(room.users.values()).filter(u => u.isOnline);
+        console.log(`🔄 [BACKEND] ${user.username} reconnected to room ${roomId} via JOIN`);
+
+        socket.emit(ACTIONS.JOINED, {
           roomId,
-          username: user.username,
-          message: `You are already in this room from another session. Please close the other tab first.`,
+          user: existingInRoom,
+          clients: roomUsers,
+          roomInfo: {
+            roomId,
+            totalUsers: roomUsers.length,
+            createdAt: room.createdAt,
+            language: room.language || 'javascript',
+            host: room.users.get(room.host)?.username || 'Unknown',
+            code: room.code || '',
+          },
+        });
+        socket.emit(ACTIONS.SYNC_CODE, {
+          code: room.code || '',
+          language: room.language || 'javascript',
+          lastUpdated: room.lastUpdated,
+        });
+        socket.to(roomId).emit(ACTIONS.USER_JOINED, {
+          user: existingInRoom,
+          timestamp: new Date().toISOString(),
+          totalUsers: roomUsers.length,
+        });
+        io.to(roomId).emit(ACTIONS.ROOM_USERS_UPDATED, {
+          roomId,
+          clients: roomUsers,
+          userJoined: existingInRoom.username,
+          totalUsers: roomUsers.length,
+          timestamp: new Date().toISOString(),
         });
         return;
       }
@@ -403,6 +547,27 @@ io.on("connection", (socket) => {
       room.users.set(socket.id, user);
       console.log(`✅ [BACKEND] Added ${user.username} to room ${roomId}`);
       console.log(`   Total users in room now: ${room.users.size}`);
+
+      // ========== PERSIST PARTICIPANT TO SESSION ==========
+      try {
+        if (room.sessionId) {
+          const joiningUser = await User.findOne({ username: user.username });
+          if (joiningUser) {
+            await RoomSession.findByIdAndUpdate(room.sessionId, {
+              $addToSet: {
+                participants: {
+                  userId: joiningUser._id,
+                  username: user.username,
+                  joinedAt: new Date(),
+                },
+              },
+            });
+            console.log(`💾 [BACKEND] Participant ${user.username} added to session ${room.sessionId}`);
+          }
+        }
+      } catch (dbErr) {
+        console.error('❌ [BACKEND] Failed to persist participant:', dbErr.message);
+      }
 
       // Get all users in the room (including the new user)
       const roomUsers = Array.from(room.users.values());
@@ -654,12 +819,13 @@ io.on("connection", (socket) => {
     });
   });
 
-  // ========== DISCONNECT ==========
+  // ========== DISCONNECT (GRACE PERIOD) ==========
+  // Browser refresh fires disconnect but the user will reconnect within seconds.
+  // Instead of immediately removing them, mark offline and wait 15 s.
   socket.on("disconnect", () => {
     try {
       console.log(`❌ [BACKEND] Socket disconnected: ${socket.id}`);
 
-      // Get user info
       const user = users.get(socket.id);
       if (!user) {
         console.log(`⚠️ [BACKEND] No user found for socket ${socket.id}`);
@@ -668,27 +834,74 @@ io.on("connection", (socket) => {
 
       const { roomId, username } = user;
 
-      // Handle leave from room
-      handleLeave(socket, roomId, username);
+      if (!roomId || !rooms.has(roomId)) {
+        users.delete(socket.id);
+        return;
+      }
 
-      // Remove from global users map
-      users.delete(socket.id);
-      console.log(`🗑️ [BACKEND] Removed ${username} from global users`);
+      const room = rooms.get(roomId);
+      const roomUser = room.users.get(socket.id);
+      if (!roomUser) {
+        users.delete(socket.id);
+        return;
+      }
+
+      // Mark user as offline — start reconnection grace period
+      roomUser.isOnline = false;
+      roomUser.disconnectedAt = Date.now();
+      console.log(`⏳ [BACKEND] ${username} marked offline in room ${roomId} — 15 s grace period started`);
+
+      const timerId = setTimeout(() => {
+        disconnectTimers.delete(socket.id);
+
+        const currentRoom = rooms.get(roomId);
+        if (!currentRoom) return; // Room already cleaned up
+
+        // Check if user already reconnected with a new socket
+        const reconnected = Array.from(currentRoom.users.values()).find(
+          (u) => u.username.toLowerCase().trim() === username.toLowerCase().trim() && u.isOnline
+        );
+        if (reconnected) {
+          // Already reconnected — just clean up the stale entry
+          console.log(`✅ [BACKEND] ${username} already reconnected — removing stale socket ${socket.id}`);
+          currentRoom.users.delete(socket.id);
+          users.delete(socket.id);
+          return;
+        }
+
+        // User didn't reconnect — do the full leave
+        console.log(`⏰ [BACKEND] Grace period expired for ${username} — handling leave`);
+        // Re-mark as online so handleLeave recognises them
+        const staleUser = currentRoom.users.get(socket.id);
+        if (staleUser) staleUser.isOnline = true;
+        handleLeave(socket, roomId, username);
+        users.delete(socket.id);
+      }, 15000);
+
+      disconnectTimers.set(socket.id, { timerId, roomId, username });
     } catch (error) {
       console.error("❌ [BACKEND] Error in disconnect:", error);
     }
   });
 
-  // ========== LEAVE ROOM ==========
+  // ========== LEAVE ROOM (EXPLICIT — NO GRACE PERIOD) ==========
   socket.on(ACTIONS.LEAVE, ({ roomId }) => {
     try {
       const user = users.get(socket.id);
       const username = user?.username || "Anonymous";
 
+      // Cancel any pending reconnection timer
+      const timerEntry = disconnectTimers.get(socket.id);
+      if (timerEntry) {
+        clearTimeout(timerEntry.timerId);
+        disconnectTimers.delete(socket.id);
+      }
+
       console.log(
         `🚪 [BACKEND] LEAVE event from ${username} for room ${roomId}`
       );
       handleLeave(socket, roomId, username);
+      users.delete(socket.id);
     } catch (error) {
       console.error("❌ [BACKEND] Error in LEAVE event:", error);
     }
@@ -696,7 +909,7 @@ io.on("connection", (socket) => {
 });
 
 // ========== HELPER FUNCTION: HANDLE LEAVE ==========
-function handleLeave(socket, roomId, username) {
+async function handleLeave(socket, roomId, username) {
   try {
     if (!roomId) {
       const u = users.get(socket.id);
@@ -737,6 +950,23 @@ function handleLeave(socket, roomId, username) {
         console.log(
           `👑❌ [BACKEND] Host "${userName}" left room ${roomId}. Closing and removing room for all participants.`
         );
+
+        // ========== SAVE SESSION SNAPSHOT TO DB ==========
+        try {
+          if (room.sessionId) {
+            const encryptedCode = encrypt(room.code || '');
+            const encryptedLanguage = encrypt(room.language || 'javascript');
+            await RoomSession.findByIdAndUpdate(room.sessionId, {
+              encryptedCode,
+              encryptedLanguage,
+              status: 'closed',
+              closedAt: new Date(),
+            });
+            console.log(`💾 [BACKEND] Session ${room.sessionId} closed with encrypted code snapshot`);
+          }
+        } catch (dbErr) {
+          console.error('❌ [BACKEND] Failed to save session snapshot:', dbErr.message);
+        }
 
         // Notify other users in this room that the host closed the room (not the host themselves)
         socket.to(roomId).emit(ACTIONS.ROOM_CLOSED, {
@@ -903,6 +1133,11 @@ console.log("✅ Execute routes mounted at /api/execute"); // TEMP DEBUG
 const executeRoutes = require("./routes/execute");
 app.use("/api/execute", executeRoutes);
 
+// Room session history routes
+const sessionRoutes = require("./routes/sessionRoutes");
+app.use("/api/sessions", sessionRoutes);
+console.log("✅ Session routes mounted at /api/sessions");
+
 // ========== GOOGLE OAUTH ROUTES ==========
 
 // Google OAuth URL endpoint
@@ -1025,22 +1260,14 @@ app.get("/api/rooms/user-status", (req, res) => {
     });
   }
 
-  // If targetRoomId is provided, check if user is already in this same room
+  // If targetRoomId is provided and user is in the same room, this is a valid reconnection
   if (targetRoomId && rooms.has(targetRoomId)) {
-    const room = rooms.get(targetRoomId);
-    const normalizedUsername = (username || "").toLowerCase().trim();
-    const existingInRoom = Array.from(room.users.values()).find(
-      (u) => u.username.toLowerCase().trim() === normalizedUsername && u.isOnline
-    );
-    if (existingInRoom) {
-      return res.json({
-        success: true,
-        inRoom: true,
-        sameRoom: true,
-        roomId: targetRoomId,
-        message: "You are already in this room from another session. Please close the other tab first."
-      });
-    }
+    return res.json({
+      success: true,
+      inRoom: false,
+      sameRoom: true,
+      roomId: targetRoomId
+    });
   }
 
   return res.json({
