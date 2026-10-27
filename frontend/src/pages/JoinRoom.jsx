@@ -636,8 +636,8 @@ const JoinRoom = () => {
       const res = await api.get(
         `/api/rooms/user-status?username=${encodeURIComponent(user.username)}&targetRoomId=${encodeURIComponent(cleanId)}`
       );
-      if (res.data?.inAnotherRoom) {
-        toast.error(res.data.message || 'You are already in another room. Please leave that room first.', {
+      if (res.data?.inRoom) {
+        toast.error(res.data.message || 'You are already in a room. Please leave it first.', {
           duration: 5000,
           icon: '⚠️',
         });
@@ -662,8 +662,28 @@ const JoinRoom = () => {
     if (!targetRoomId || !user) return;
     autoJoinedRef.current = true;
 
-    initSocketConnection(targetRoomId);
-  }, [roomIdParam, user, initSocketConnection]);
+    // Pre-check if user is already in a room before auto-joining
+    const preCheckAndJoin = async () => {
+      try {
+        const res = await api.get(
+          `/api/rooms/user-status?username=${encodeURIComponent(user.username)}&targetRoomId=${encodeURIComponent(targetRoomId)}`
+        );
+        if (res.data?.inRoom) {
+          toast.error(res.data.message || 'You are already in a room. Please leave it first.', {
+            duration: 5000,
+            icon: '⚠️',
+          });
+          navigate('/dashboard');
+          return;
+        }
+      } catch (err) {
+        console.error('Error pre-checking room status before auto-join:', err);
+      }
+      initSocketConnection(targetRoomId);
+    };
+
+    preCheckAndJoin();
+  }, [roomIdParam, user, initSocketConnection, navigate]);
 
   // Handle language selection
   const handleLanguageSelect = useCallback(

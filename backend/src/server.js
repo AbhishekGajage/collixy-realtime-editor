@@ -92,6 +92,20 @@ function findUserInOtherRoom(username, targetRoomId) {
   return null;
 }
 
+// Helper: check if a username is already ONLINE in ANY room (including the target).
+// Returns { roomId, user } if found, or null otherwise.
+function findUserInAnyRoom(username) {
+  const normalized = (username || "").toLowerCase().trim();
+  for (const [rId, room] of rooms) {
+    for (const u of room.users.values()) {
+      if (u.username.toLowerCase().trim() === normalized && u.isOnline) {
+        return { roomId: rId, user: u };
+      }
+    }
+  }
+  return null;
+}
+
 // ========== SOCKET.IO CONNECTION HANDLING ==========
 io.on("connection", (socket) => {
   console.log(`✅ [BACKEND] New socket connection: ${socket.id}`);
@@ -121,17 +135,25 @@ io.on("connection", (socket) => {
           return;
         }
 
-        // Check if this user is already in a DIFFERENT room
-        const otherRoom = findUserInOtherRoom(username, roomId);
-        if (otherRoom) {
+        // Check if this user is already ONLINE in ANY room (same or different)
+        const activeRoom = findUserInAnyRoom(username);
+        if (activeRoom) {
           console.log(
-            `⚠️ [BACKEND] User "${username}" is already in room ${otherRoom.roomId} — must leave first`
+            `⚠️ [BACKEND] User "${username}" is already online in room ${activeRoom.roomId} — must leave first`
           );
-          socket.emit(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, {
-            roomId: otherRoom.roomId,
-            username,
-            message: `You are already in another room. Please leave that room first before creating a new one.`,
-          });
+          if (activeRoom.roomId === roomId) {
+            socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+              roomId: activeRoom.roomId,
+              username,
+              message: `You are already in this room from another session. Please close the other session first.`,
+            });
+          } else {
+            socket.emit(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, {
+              roomId: activeRoom.roomId,
+              username,
+              message: `You are already in another room. Please leave that room first before creating a new one.`,
+            });
+          }
           return;
         }
 
@@ -164,7 +186,21 @@ io.on("connection", (socket) => {
             (u) => u.username.toLowerCase().trim() === normalizedUsername
           );
           if (existingInRoom) {
-            // Reconnection! Cancel grace period timer and swap socket ID
+            // If the existing entry is ONLINE, this is a duplicate session — block it
+            if (existingInRoom.isOnline && existingInRoom.id !== socket.id) {
+              console.log(
+                `⚠️ [BACKEND] User "${username}" already has an active session in room ${roomId} — blocking duplicate`
+              );
+              socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+                roomId,
+                username,
+                message: `You are already in this room from another session. Please close the other session first.`,
+              });
+              return;
+            }
+
+            // Existing entry is OFFLINE — genuine reconnection (e.g., page refresh)
+            // Cancel grace period timer and swap socket ID
             const oldSocketId = existingInRoom.id;
             const timerEntry = disconnectTimers.get(oldSocketId);
             if (timerEntry) {
@@ -417,17 +453,25 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Check if this user is already in a DIFFERENT room
-      const otherRoom = findUserInOtherRoom(username, roomId);
-      if (otherRoom) {
+      // Check if this user is already ONLINE in ANY room (same or different)
+      const activeRoom = findUserInAnyRoom(username);
+      if (activeRoom) {
         console.log(
-          `⚠️ [BACKEND] User "${username}" is already in room ${otherRoom.roomId} — must leave first`
+          `⚠️ [BACKEND] User "${username}" is already online in room ${activeRoom.roomId} — must leave first`
         );
-        socket.emit(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, {
-          roomId: otherRoom.roomId,
-          username,
-          message: `You are already in another room. Please leave that room first before joining a new one.`,
-        });
+        if (activeRoom.roomId === roomId) {
+          socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+            roomId: activeRoom.roomId,
+            username,
+            message: `You are already in this room from another session. Please close the other session first.`,
+          });
+        } else {
+          socket.emit(ACTIONS.USER_ALREADY_IN_ANOTHER_ROOM, {
+            roomId: activeRoom.roomId,
+            username,
+            message: `You are already in another room. Please leave that room first before joining a new one.`,
+          });
+        }
         return;
       }
 
@@ -471,7 +515,21 @@ io.on("connection", (socket) => {
         (u) => u.username.toLowerCase().trim() === normalizedUsername
       );
       if (existingInRoom) {
-        // Reconnection! Cancel grace period timer and swap socket ID
+        // If the existing entry is ONLINE, this is a duplicate session — block it
+        if (existingInRoom.isOnline && existingInRoom.id !== socket.id) {
+          console.log(
+            `⚠️ [BACKEND] User "${user.username}" already has an active session in room ${roomId} — blocking duplicate`
+          );
+          socket.emit(ACTIONS.USER_ALREADY_IN_ROOM, {
+            roomId,
+            username: user.username,
+            message: `You are already in this room from another session. Please close the other session first.`,
+          });
+          return;
+        }
+
+        // Existing entry is OFFLINE — genuine reconnection (e.g., page refresh)
+        // Cancel grace period timer and swap socket ID
         const oldSocketId = existingInRoom.id;
         const timerEntry = disconnectTimers.get(oldSocketId);
         if (timerEntry) {
@@ -1246,27 +1304,21 @@ app.get("/api/rooms/user-status", (req, res) => {
     return res.status(400).json({ success: false, error: "Username is required" });
   }
 
-  // Check if user is in a different room
-  const otherRoom = findUserInOtherRoom(username, targetRoomId);
-  if (otherRoom) {
+  // Check if user is ONLINE in ANY room
+  const activeRoom = findUserInAnyRoom(username);
+  if (activeRoom) {
+    const isSameRoom = targetRoomId && activeRoom.roomId === targetRoomId;
     return res.json({
       success: true,
       inRoom: true,
-      inAnotherRoom: true,
-      roomId: otherRoom.roomId,
-      message: targetRoomId
-        ? "You are already in another room. Please leave that room first before joining a new one."
-        : "You are already in another room. Please leave that room first before creating a new one."
-    });
-  }
-
-  // If targetRoomId is provided and user is in the same room, this is a valid reconnection
-  if (targetRoomId && rooms.has(targetRoomId)) {
-    return res.json({
-      success: true,
-      inRoom: false,
-      sameRoom: true,
-      roomId: targetRoomId
+      inAnotherRoom: !isSameRoom,
+      inSameRoom: isSameRoom,
+      roomId: activeRoom.roomId,
+      message: isSameRoom
+        ? "You are already in this room from another session. Please close the other session first."
+        : targetRoomId
+          ? "You are already in another room. Please leave that room first before joining a new one."
+          : "You are already in another room. Please leave that room first before creating a new one."
     });
   }
 
