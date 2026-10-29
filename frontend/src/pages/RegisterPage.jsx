@@ -23,8 +23,14 @@ const RegisterPage = () => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [gitHubLoading, setGitHubLoading] = useState(false);
   const [serverError, setServerError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Computed: true when any OAuth flow is in progress
+  const isOAuthLoading = googleLoading || gitHubLoading;
+  // Computed: true when anything is processing (OAuth or form submit)
+  const isAnyLoading = loading || isOAuthLoading;
 
   // Handle escape key
   useEffect(() => {
@@ -196,30 +202,30 @@ const RegisterPage = () => {
         window.location.href = response.url;
       } else {
         setServerError('Failed to get Google authentication URL');
+        setGoogleLoading(false);
       }
     } catch (error) {
       console.error('Google signup error:', error);
       setServerError('Failed to initiate Google signup. Please try again.');
-    } finally {
       setGoogleLoading(false);
     }
   };
 
   const handleGitHubSignUp = async () => {
     try {
-      setGoogleLoading(true);
+      setGitHubLoading(true);
       setServerError('');
       const response = await authAPI.getGitHubAuthUrl();
       if (response.data.success && response.data.url) {
         window.location.href = response.data.url;
       } else {
         setServerError('Failed to get GitHub authentication URL');
+        setGitHubLoading(false);
       }
     } catch (error) {
       console.error('GitHub signup error:', error);
       setServerError('Failed to initiate GitHub signup. Please try again.');
-    } finally {
-      setGoogleLoading(false);
+      setGitHubLoading(false);
     }
   };
 
@@ -332,8 +338,16 @@ const RegisterPage = () => {
 
             {/* Social Sign Up Buttons - Side by Side */}
             <div className="flex gap-3 mb-3">
-              <GoogleButton onClick={handleGoogleSignUp} />
-              <GitHubButton onClick={handleGitHubSignUp} />
+              <GoogleButton
+                onClick={handleGoogleSignUp}
+                disabled={isAnyLoading}
+                loading={googleLoading}
+              />
+              <GitHubButton
+                onClick={handleGitHubSignUp}
+                disabled={isAnyLoading}
+                loading={gitHubLoading}
+              />
             </div>
 
             {/* Divider */}
@@ -387,7 +401,7 @@ const RegisterPage = () => {
                       autoComplete="username"
                       value={formData.username}
                       onChange={handleChange}
-                      disabled={loading}
+                      disabled={isAnyLoading}
                       placeholder="johndoe"
                       className={`block w-full pl-8 pr-3 py-2 text-xs sm:text-sm border ${
                         errors.username ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 dark:border-gray-700'
@@ -415,7 +429,7 @@ const RegisterPage = () => {
                       autoComplete="email"
                       value={formData.email}
                       onChange={handleChange}
-                      disabled={loading}
+                      disabled={isAnyLoading}
                       placeholder="you@example.com"
                       className={`block w-full pl-8 pr-3 py-2 text-xs sm:text-sm border ${
                         errors.email ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 dark:border-gray-700'
@@ -446,7 +460,7 @@ const RegisterPage = () => {
                       autoComplete="new-password"
                       value={formData.password}
                       onChange={handleChange}
-                      disabled={loading}
+                      disabled={isAnyLoading}
                       placeholder="••••••••"
                       className={`block w-full pl-8 pr-8 py-2 text-xs sm:text-sm border ${
                         errors.password ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 dark:border-gray-700'
@@ -491,7 +505,7 @@ const RegisterPage = () => {
                       autoComplete="new-password"
                       value={formData.confirmPassword}
                       onChange={handleChange}
-                      disabled={loading}
+                      disabled={isAnyLoading}
                       placeholder="••••••••"
                       className={`block w-full pl-8 pr-8 py-2 text-xs sm:text-sm border ${
                         errors.confirmPassword ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 dark:border-gray-700'
@@ -544,6 +558,7 @@ const RegisterPage = () => {
                     type="checkbox"
                     checked={agreedToTerms}
                     onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    disabled={isAnyLoading}
                     className="cursor-pointer h-3.5 w-3.5 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-700 rounded mr-2"
                   />
                   <span>
@@ -558,7 +573,7 @@ const RegisterPage = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={isAnyLoading}
                 className="cursor-pointer w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-semibold py-2.5 px-4 rounded-xl shadow-md hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
               >
                 {loading ? (

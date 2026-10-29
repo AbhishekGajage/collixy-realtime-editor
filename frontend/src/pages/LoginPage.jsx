@@ -39,6 +39,11 @@ const LoginPage = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('rememberMe') === 'true');
 
+  // Computed: true when any OAuth flow is in progress
+  const isOAuthLoading = isGoogleLoading || isGitHubLoading;
+  // Computed: true when anything is processing (OAuth or form submit)
+  const isAnyLoading = isLoading || isOAuthLoading;
+
   // On mount: if the user previously checked "Remember Me", pre-fill the email
   useEffect(() => {
     if (localStorage.getItem('rememberMe') === 'true') {
@@ -312,6 +317,7 @@ const LoginPage = () => {
         setErrors({ 
           general: response.data.message || 'Failed to get Google login URL' 
         });
+        setIsGoogleLoading(false);
       }
     } catch (error) {
       console.error('❌ Google login error:', error);
@@ -330,7 +336,6 @@ const LoginPage = () => {
       }
       
       setErrors({ general: errorMessage });
-    } finally {
       setIsGoogleLoading(false);
     }
   }, [backendStatus]);
@@ -358,6 +363,7 @@ const LoginPage = () => {
         setErrors({
           general: response.data.message || 'Failed to get GitHub login URL'
         });
+        setIsGitHubLoading(false);
       }
     } catch (error) {
       console.error('❌ GitHub login error:', error);
@@ -368,7 +374,6 @@ const LoginPage = () => {
         errorMessage += error.message || 'Please try again.';
       }
       setErrors({ general: errorMessage });
-    } finally {
       setIsGitHubLoading(false);
     }
   }, [backendStatus]);
@@ -531,8 +536,16 @@ const LoginPage = () => {
               {backendStatus === 'connected' && (
                 <>
                   <div className="flex gap-3 mb-2">
-                    <GoogleButton onClick={handleGoogleLogin} />
-                    <GitHubButton onClick={handleGitHubLogin} />
+                    <GoogleButton
+                      onClick={handleGoogleLogin}
+                      disabled={isAnyLoading}
+                      loading={isGoogleLoading}
+                    />
+                    <GitHubButton
+                      onClick={handleGitHubLogin}
+                      disabled={isAnyLoading}
+                      loading={isGitHubLoading}
+                    />
                   </div>
                   
                   <Divider text="or continue with email" />
@@ -557,7 +570,7 @@ const LoginPage = () => {
                   onChange={handleChange}
                   placeholder="you@example.com"
                   error={errors.email}
-                  disabled={isLoading || backendStatus === 'disconnected'}
+                  disabled={isAnyLoading || backendStatus === 'disconnected'}
                   className="w-full"
                 />
                 
@@ -569,7 +582,7 @@ const LoginPage = () => {
                   onChange={handleChange}
                   placeholder="••••••••"
                   error={errors.password}
-                  disabled={isLoading || backendStatus === 'disconnected'}
+                  disabled={isAnyLoading || backendStatus === 'disconnected'}
                   className="w-full"
                 />
                 
@@ -579,6 +592,7 @@ const LoginPage = () => {
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
+                      disabled={isAnyLoading}
                       className="mr-2 rounded h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 cursor-pointer"
                     />
                     <span className="text-sm text-gray-600 dark:text-gray-400">
@@ -594,7 +608,7 @@ const LoginPage = () => {
                 </div>
                 
                 <SubmitButton 
-                  disabled={isLoading || backendStatus === 'disconnected'} 
+                  disabled={isAnyLoading || backendStatus === 'disconnected'} 
                   loading={isLoading}
                   className="w-full"
                 >
