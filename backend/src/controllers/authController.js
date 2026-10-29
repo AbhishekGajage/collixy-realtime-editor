@@ -1,9 +1,11 @@
 //controllers/authController.js
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const { validationResult } = require("express-validator");
 const { OAuth2Client } = require("google-auth-library");
+const sendEmail = require("../utils/sendEmail");
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -760,6 +762,175 @@ exports.debugToken = async (req, res) => {
       success: false,
       message: 'Server error',
       error: error.message
+    });
+  }
+};
+
+// @desc    Forgot password — send reset link via email
+// @route   POST /api/auth/forgot-password
+// @access  Public
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide your email address',
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      // Don't reveal whether the email exists — always return success
+      return res.json({
+        success: true,
+        message: 'If an account with that email exists, a password reset link has been sent.',
+      });
+    }
+
+    // Reject Google-only accounts (no password set)
+    if (user.googleId && !user.password) {
+      return res.status(400).json({
+        success: false,
+        message: 'This account uses Google Sign-In. Please log in with Google instead.',
+      });
+    }
+
+    // Generate reset token (instance method on user model)
+    const resetToken = user.getResetPasswordToken();
+    await user.save({ validateBeforeSave: false });
+
+    // Build reset URL pointing to the frontend page
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+
+    // Send email
+    const html = `
+      <div style="max-width:520px;margin:0 auto;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#0f172a;border-radius:16px;overflow:hidden">
+        <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:32px 24px;text-align:center">
+          <h1 style="margin:0;color:#fff;font-size:24px;font-weight:700">Collixy</h1>
+          <p style="margin:8px 0 0;color:#c7d2fe;font-size:14px">Reset your password</p>
+        </div>
+        <div style="padding:32px 24px;color:#e2e8f0">
+          <p style="margin:0 0 16px;font-size:15px">Hi <strong>${user.username}</strong>,</p>
+          <p style="margin:0 0 24px;font-size:15px;line-height:1.6">
+            We received a request to reset the password for your Collixy account.
+            Click the button below to choose a new password. This link will expire in <strong>10 minutes</strong>.
+          </p>
+          <div style="text-align:center;margin:0 0 24px">
+            <a href="${resetUrl}"
+               style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;text-decoration:none;font-weight:600;font-size:15px;border-radius:10px">
+              Reset Password
+            </a>
+          </div>
+          <p style="margin:0 0 8px;font-size:13px;color:#94a3b8">
+            If you didn't request this, you can safely ignore this email — your password will remain unchanged.
+          </p>
+          <p style="margin:0;font-size:13px;color:#94a3b8">
+            Or paste this link into your browser:<br/>
+            <a href="${resetUrl}" style="color:#818cf8;word-break:break-all">${resetUrl}</a>
+          </p>
+        </div>
+        <div style="padding:16px 24px;text-align:center;border-top:1px solid #1e293b">
+          <p style="margin:0;font-size:12px;color:#64748b">© ${new Date().getFullYear()} Collixy. All rights reserved.</p>
+        </div>
+      </div>
+    `;
+
+    await sendEmail({
+      to: user.email,
+      subject: 'Collixy — Password Reset Request',
+      html,
+      text: `Hi ${user.username},\n\nReset your Collixy password using this link (expires in 10 minutes):\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
+    });
+
+    console.log(`✅ Password reset email sent to ${user.email}`);
+
+    return res.json({
+      success: true,
+      message: 'If an account with that email exists, a password reset link has been sent.',
+    });
+  } catch (error) {
+    console.error('❌ Forgot password error:', error);
+
+    // If email sending fails, clear the reset token so the user can try again
+    try {
+      const user = await User.findOne({ email: req.body.email?.toLowerCase() });
+      if (user) {
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save({ validateBeforeSave: false });
+      }
+    } catch (_) {
+      // ignore cleanup errors
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to send password reset email. Please try again later.',
+    });
+  }
+};
+
+// @desc    Reset password using token from email
+// @route   POST /api/auth/reset-password/:token
+// @access  Public
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a new password',
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters',
+      });
+    }
+
+    // Hash the token from the URL and look up the user
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() },
+    }).select('+password');
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token. Please request a new password reset link.',
+      });
+    }
+
+    // Update password (pre-save middleware will hash it)
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    console.log(`✅ Password reset successful for ${user.email}`);
+
+    return res.json({
+      success: true,
+      message: 'Password has been reset successfully. You can now log in with your new password.',
+    });
+  } catch (error) {
+    console.error('❌ Reset password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during password reset. Please try again.',
     });
   }
 };

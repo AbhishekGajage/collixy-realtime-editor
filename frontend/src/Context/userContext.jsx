@@ -13,7 +13,15 @@ export const UserProvider = ({ children }) => {
       try {
         // First check if user is already in sessionStorage
         const storedUser = sessionStorage.getItem('user');
-        const token = sessionStorage.getItem('accessToken');
+        let token = sessionStorage.getItem('accessToken');
+        
+        // If no token in sessionStorage, check localStorage ("Remember Me")
+        if (!token && localStorage.getItem('accessToken')) {
+          token = localStorage.getItem('accessToken');
+          // Copy to sessionStorage for this session
+          sessionStorage.setItem('accessToken', token);
+          console.log('🔑 Restored token from localStorage (Remember Me)');
+        }
         
         if (storedUser && token) {
           // User exists in sessionStorage
@@ -69,6 +77,8 @@ export const UserProvider = ({ children }) => {
     } finally {
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('user');
+      // Also clear "Remember Me" tokens
+      localStorage.removeItem('accessToken');
       setUser(null);
       if (window.location.pathname !== '/') {
         window.location.href = '/';

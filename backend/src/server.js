@@ -1151,6 +1151,8 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
+const passport = require("./config/passport");
+app.use(passport.initialize());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // ========== DATABASE CONNECTION ==========
@@ -1176,6 +1178,69 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// ========== GITHUB OAUTH ROUTES (Passport) ==========
+
+const jwt = require("jsonwebtoken");
+
+// GitHub OAuth — redirect to GitHub authorization page
+app.get("/api/auth/github/url", (req, res) => {
+  if (!process.env.GITHUB_CLIENT_ID) {
+    return res.status(500).json({
+      success: false,
+      message: "GitHub OAuth not configured",
+      error: "GITHUB_CLIENT_ID is not set in environment variables",
+    });
+  }
+
+  const rootUrl = "https://github.com/login/oauth/authorize";
+  const options = {
+    client_id: process.env.GITHUB_CLIENT_ID,
+    redirect_uri:
+      process.env.GITHUB_REDIRECT_URI ||
+      `http://${req.headers.host}/api/auth/github/callback`,
+    scope: "user:email",
+  };
+
+  const qs = new URLSearchParams(options);
+  const url = `${rootUrl}?${qs.toString()}`;
+
+  res.json({ success: true, url });
+});
+
+// GitHub OAuth callback — Passport handles the exchange, then we issue a JWT
+app.get(
+  "/api/auth/github/callback",
+  passport.authenticate("github", { session: false, failureRedirect: "/login" }),
+  (req, res) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.redirect(
+          `${process.env.FRONTEND_URL || "http://localhost:5173"}/login?error=github_auth_failed`
+        );
+      }
+
+      // Generate JWT (same helper used by Google flow)
+      const token = jwt.sign(
+        { id: user._id.toString() },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRE || "1d" }
+      );
+
+      console.log("✅ GitHub OAuth successful for:", user.email);
+
+      // Redirect to the same frontend callback page Google uses
+      const frontendUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/auth/callback?token=${token}`;
+      return res.redirect(frontendUrl);
+    } catch (error) {
+      console.error("❌ GitHub callback error:", error);
+      return res.redirect(
+        `${process.env.FRONTEND_URL || "http://localhost:5173"}/login?error=github_auth_failed&message=${encodeURIComponent(error.message)}`
+      );
+    }
+  }
+);
 
 // Import auth routes
 const authRoutes = require("./routes/authRoutes");

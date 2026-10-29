@@ -261,7 +261,54 @@ router.post('/login',
   }
 );
 
-// ========== PROTECTED ROUTES ==========
+// Forgot Password route
+router.post('/forgot-password',
+  validate([
+    body('email')
+      .isEmail()
+      .withMessage('Please enter a valid email')
+      .normalizeEmail()
+  ]),
+  (req, res, next) => {
+    try {
+      if (typeof authController.forgotPassword !== 'function') {
+        throw new Error('forgotPassword function not found in authController');
+      }
+      return authController.forgotPassword(req, res, next);
+    } catch (error) {
+      console.error('❌ Route handler error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error',
+        error: error.message
+      });
+    }
+  }
+);
+
+// Reset Password route
+router.post('/reset-password/:token',
+  validate([
+    body('password')
+      .isLength({ min: 6 })
+      .withMessage('Password must be at least 6 characters')
+  ]),
+  (req, res, next) => {
+    try {
+      if (typeof authController.resetPassword !== 'function') {
+        throw new Error('resetPassword function not found in authController');
+      }
+      return authController.resetPassword(req, res, next);
+    } catch (error) {
+      console.error('❌ Route handler error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error',
+        error: error.message
+      });
+    }
+  }
+);
 
 // All routes below this require authentication
 router.use((req, res, next) => {

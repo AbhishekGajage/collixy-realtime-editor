@@ -25,7 +25,8 @@ const api = axios.create({
 // Request interceptor for debugging
 api.interceptors.request.use(
   (config) => {
-    const token = sessionStorage.getItem('accessToken');
+    // Check sessionStorage first, then localStorage (for "Remember Me")
+    const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -81,6 +82,7 @@ api.interceptors.response.use(
       console.log('🔒 Unauthorized, removing token');
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('user');
+      localStorage.removeItem('accessToken');
       // Don't redirect if already on login page
       if (!window.location.pathname.includes('/login')) {
         setTimeout(() => {
@@ -150,6 +152,9 @@ export const authAPI = {
   // Google OAuth config debug
   getGoogleConfigDebug: () => api.get('/api/auth/google/debug-config'),
   
+  // GitHub OAuth
+  getGitHubAuthUrl: () => api.get('/api/auth/github/url'),
+  
   // Login
   login: (email, password) => 
     api.post('/api/auth/login', { email, password }),
@@ -176,6 +181,14 @@ export const authAPI = {
   
   // Simple test
   test: () => api.get('/api/test'),
+
+  // Forgot password — send reset email
+  forgotPassword: (email) =>
+    api.post('/api/auth/forgot-password', { email }),
+
+  // Reset password with token
+  resetPassword: (token, password) =>
+    api.post(`/api/auth/reset-password/${token}`, { password }),
 };
 // Individual export for register function
 //services/api.js

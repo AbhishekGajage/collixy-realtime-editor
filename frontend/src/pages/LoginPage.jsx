@@ -7,6 +7,7 @@ import { useTheme } from '../Context/useTheme';
 import { useUser } from '../Context/userContext';
 import {
   GoogleButton,
+  GitHubButton,
   Divider,
   FormInput,
   SubmitButton,
@@ -32,14 +33,27 @@ const LoginPage = () => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGitHubLoading, setIsGitHubLoading] = useState(false);
   const [backendStatus, setBackendStatus] = useState('checking');
   const [connectionTestResult, setConnectionTestResult] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('rememberMe') === 'true');
+
+  // On mount: if the user previously checked "Remember Me", pre-fill the email
+  useEffect(() => {
+    if (localStorage.getItem('rememberMe') === 'true') {
+      const savedEmail = localStorage.getItem('rememberedEmail');
+      if (savedEmail) {
+        setFormData(prev => ({ ...prev, email: savedEmail }));
+      }
+    }
+  }, []);
 
   // SINGLE useEffect that handles ALL initialization
   useEffect(() => {
     console.log('🔍 LoginPage initialization effect running');
     
+  
     let mounted = true;
     
     const initializePage = async () => {
@@ -224,7 +238,20 @@ const LoginPage = () => {
 
       if (res.data.success) {
         console.log('✅ Email login successful');
-        sessionStorage.setItem("accessToken", res.data.token);
+
+        // Remember Me: persist token in localStorage (survives browser close)
+        // or sessionStorage (cleared on browser close)
+        if (rememberMe) {
+          localStorage.setItem('accessToken', res.data.token);
+          localStorage.setItem('rememberMe', 'true');
+          localStorage.setItem('rememberedEmail', formData.email);
+          sessionStorage.setItem('accessToken', res.data.token); // also set for current session
+        } else {
+          sessionStorage.setItem('accessToken', res.data.token);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('rememberMe');
+          localStorage.removeItem('rememberedEmail');
+        }
         sessionStorage.setItem("isNewUser", res.data.isNewUser ? "true" : "false");
         setUser(res.data.user);
         
@@ -256,7 +283,7 @@ const LoginPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [formData, validateForm, setUser, navigate, location.state?.from]);
+  }, [formData, validateForm, setUser, navigate, location.state?.from, rememberMe]);
 
   const handleGoogleLogin = useCallback(async () => {
     if (backendStatus === 'disconnected') {
@@ -305,6 +332,44 @@ const LoginPage = () => {
       setErrors({ general: errorMessage });
     } finally {
       setIsGoogleLoading(false);
+    }
+  }, [backendStatus]);
+
+  const handleGitHubLogin = useCallback(async () => {
+    if (backendStatus === 'disconnected') {
+      setErrors({
+        general: 'Cannot connect to server. Make sure backend is running at http://localhost:5001'
+      });
+      return;
+    }
+
+    setIsGitHubLoading(true);
+    setErrors({});
+    setSuccessMessage('');
+
+    try {
+      console.log('🐙 Requesting GitHub OAuth URL...');
+      const response = await authAPI.getGitHubAuthUrl();
+
+      if (response.data.success && response.data.url) {
+        console.log('🌐 Redirecting to GitHub OAuth...');
+        window.location.href = response.data.url;
+      } else {
+        setErrors({
+          general: response.data.message || 'Failed to get GitHub login URL'
+        });
+      }
+    } catch (error) {
+      console.error('❌ GitHub login error:', error);
+      let errorMessage = 'Failed to start GitHub authentication. ';
+      if (error.response?.status === 500) {
+        errorMessage = 'Server error: ' + (error.response.data?.message || 'GitHub OAuth may not be configured');
+      } else {
+        errorMessage += error.message || 'Please try again.';
+      }
+      setErrors({ general: errorMessage });
+    } finally {
+      setIsGitHubLoading(false);
     }
   }, [backendStatus]);
 
@@ -465,12 +530,10 @@ const LoginPage = () => {
               
               {backendStatus === 'connected' && (
                 <>
-                  <GoogleButton 
-                    onClick={handleGoogleLogin} 
-                    loading={isGoogleLoading}
-                    disabled={isGoogleLoading}
-                    className="w-full"
-                  />
+                  <div className="flex gap-3 mb-2">
+                    <GoogleButton onClick={handleGoogleLogin} />
+                    <GitHubButton onClick={handleGitHubLogin} />
+                  </div>
                   
                   <Divider text="or continue with email" />
                 </>
@@ -511,8 +574,13 @@ const LoginPage = () => {
                 />
                 
                 <div className="flex justify-between items-center mb-4">
-                  <label className="flex items-center">
-                    <input type="checkbox" className="mr-2 rounded" />
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="mr-2 rounded h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 cursor-pointer"
+                    />
                     <span className="text-sm text-gray-600 dark:text-gray-400">
                       Remember me
                     </span>
