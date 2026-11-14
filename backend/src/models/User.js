@@ -195,11 +195,6 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-// Virtual for user display name
-userSchema.virtual('displayName').get(function() {
-  return this.username;
-});
-
 // Indexes
 userSchema.index({ 'collaboratingOn.document': 1 });
 userSchema.index({ lastActive: -1 });
