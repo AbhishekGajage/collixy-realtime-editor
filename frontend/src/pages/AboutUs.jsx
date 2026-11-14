@@ -87,16 +87,16 @@ const AboutUs = () => {
       <Navbar onLoginClick={() => navigate(user ? '/dashboard' : '/login')} />
 
       <main className="grow pt-20 pb-16">
-        {/* Back to Dashboard Button */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        {/* Back to Home / Dashboard Button */}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-10 mb-2">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(user ? '/dashboard' : '/')}
             className={`inline-flex items-center gap-2 text-sm font-medium transition-colors cursor-pointer ${
               isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             <FiArrowLeft className="w-4 h-4" />
-            <span>Back to Dashboard</span>
+            <span>{user ? 'Back to Dashboard' : 'Back to Home'}</span>
           </button>
         </div>
         {/* Hero Section */}

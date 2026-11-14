@@ -239,13 +239,13 @@ const TermsOfService = () => {
           {/* Back to Dashboard Button */}
           <div className="mb-6">
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(user ? '/dashboard' : '/')}
               className={`inline-flex items-center gap-2 text-sm font-medium transition-colors cursor-pointer ${
                 isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               <FiArrowLeft className="w-4 h-4" />
-              <span>Back to Dashboard</span>
+              <span>{user ? 'Back to Dashboard' : 'Back to Home'}</span>
             </button>
           </div>
           

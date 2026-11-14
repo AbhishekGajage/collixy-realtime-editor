@@ -39,7 +39,7 @@ const Footer = () => {
               />
             </div>
             
-            {/* Navigation Links */}
+                        {/* Navigation Links */}
             <div className="flex gap-4 md:gap-6">
               <button 
                 onClick={() => handleLinkClick('/about')}
@@ -51,23 +51,7 @@ const Footer = () => {
               >
                 About Us
               </button>
-              <button 
-                onClick={() => {
-                  if (window.location.pathname === '/') {
-                    const el = document.getElementById('features');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    navigate('/');
-                  }
-                }}
-                className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap cursor-pointer ${
-                  theme === "dark" 
-                    ? "text-gray-300 hover:text-white" 
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Features
-              </button>
+              {/* Support button - commented out for now
               <button 
                 onClick={() => window.location.href = 'mailto:support@collixy.com'}
                 className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap cursor-pointer ${
@@ -78,6 +62,7 @@ const Footer = () => {
               >
                 Support
               </button>
+              */}
             </div>
           </div>
           
@@ -123,6 +108,7 @@ const Footer = () => {
             >
               Terms of Service
             </button>
+            {/* Cookie Policy - commented out for now
             <button className={`transition-colors ${
               theme === "dark" 
                 ? "text-gray-400 hover:text-gray-300" 
@@ -130,6 +116,7 @@ const Footer = () => {
             }`}>
               Cookie Policy
             </button>
+            */}
           </div>
         </div>
       </div>

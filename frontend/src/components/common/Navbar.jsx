@@ -1,7 +1,6 @@
 // src/components/common/Navbar.jsx
 import React, { useState, useEffect, useRef } from "react";
 import collixy_logo from "../../assets/collixy-logo.svg";
-import get_icon from "../../assets/get_started.png";
 import Switch from "../common/Switch";
 import { useTheme } from "../../Context/useTheme";
 import { useUser } from "../../Context/userContext";
@@ -233,36 +232,16 @@ const Navbar = ({ onLoginClick }) => {
             </div>
           ) : (
             /* Unauthenticated Buttons */
-            <>
-              {/* Login Button */}
-              <button
-                onClick={onLoginClick}
-                className={`cursor-pointer px-4 md:px-5 py-2 rounded-xl text-sm font-medium tracking-wider transition-colors ${
-                  theme === "dark"
-                    ? "bg-white hover:bg-blue-50 text-black"
-                    : "bg-[#0F2854] hover:bg-[#0a1f42] text-white"
-                }`}
-              >
-                Login
-              </button>
-
-              {/* Get Started Button */}
-              <button
-                className={`cursor-pointer flex items-center gap-2 px-4 md:px-5 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
-                  theme === "dark"
-                    ? "bg-white hover:bg-blue-50 text-blue-900"
-                    : "bg-[#0a84ff3f] hover:bg-[#0a84ff5f] text-blue-700"
-                }`}
-                onClick={onLoginClick}
-              >
-                <img
-                  src={get_icon}
-                  alt="Get started"
-                  className="h-4 w-4"
-                />
-                <span>Get started</span>
-              </button>
-            </>
+            <button
+              onClick={onLoginClick}
+              className={`cursor-pointer px-4 md:px-5 py-2 rounded-xl text-sm font-medium tracking-wider transition-colors ${
+                theme === "dark"
+                  ? "bg-white hover:bg-blue-50 text-black"
+                  : "bg-[#0F2854] hover:bg-[#0a1f42] text-white"
+              }`}
+            >
+              Login
+            </button>
           )}
 
           <Switch isOn={theme === "dark"} onToggle={toggleTheme} />
@@ -378,18 +357,6 @@ const Navbar = ({ onLoginClick }) => {
                 }`}
               >
                 Login
-              </button>
-
-              <button
-                onClick={() => handleActionClick(onLoginClick)}
-                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                  theme === "dark"
-                    ? "bg-blue-600/30 hover:bg-blue-600/40 text-blue-200 border border-blue-500/30"
-                    : "bg-[#0a84ff20] hover:bg-[#0a84ff35] text-blue-700 border border-blue-400/30"
-                }`}
-              >
-                <img src={get_icon} alt="Get started" className="h-4 w-4" />
-                <span>Get started</span>
               </button>
             </div>
           )}
