@@ -14,7 +14,8 @@ import {
   FiGlobe, 
   FiTerminal, 
   FiCheckCircle, 
-  FiArrowRight, 
+  FiArrowRight,
+  FiArrowLeft, 
   FiLayers,
   FiAward,
   FiCompass
@@ -83,9 +84,21 @@ const AboutUs = () => {
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${
       isDark ? 'bg-gray-900 text-gray-100' : 'bg-[#EDF1FE] text-gray-900'
     }`}>
-      <Navbar onLoginClick={() => navigate('/login')} />
+      <Navbar onLoginClick={() => navigate(user ? '/dashboard' : '/login')} />
 
       <main className="grow pt-20 pb-16">
+        {/* Back to Dashboard Button */}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className={`inline-flex items-center gap-2 text-sm font-medium transition-colors cursor-pointer ${
+              isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <FiArrowLeft className="w-4 h-4" />
+            <span>Back to Dashboard</span>
+          </button>
+        </div>
         {/* Hero Section */}
         <section className="relative px-4 sm:px-6 lg:px-8 pt-12 pb-20 text-center overflow-hidden">
           {/* Background Ambient Glows */}
@@ -279,16 +292,7 @@ const AboutUs = () => {
                 <span>{user ? 'Go to Dashboard' : 'Get Started Free'}</span>
                 <FiArrowRight className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => navigate('/login')}
-                className={`px-6 py-3 rounded-xl font-semibold border transition-all cursor-pointer ${
-                  isDark
-                    ? 'border-indigo-400/40 text-indigo-200 hover:bg-indigo-900/40'
-                    : 'border-white/40 text-white hover:bg-white/10'
-                }`}
-              >
-                Sign In
-              </button>
+              
             </div>
           </div>
         </section>

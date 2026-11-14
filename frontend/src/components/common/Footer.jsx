@@ -2,12 +2,14 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import logo from '../../assets/collixy-logo-icon.svg';
 import { useTheme } from "../../Context/useTheme";
+import { useUser } from "../../Context/userContext";
 import SocialTooltip from './SocialTooltip';
 
 const Footer = () => {
   const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
   const { theme } = useTheme();
+  const { user } = useUser();
 
   const handleLinkClick = (path) => {
     if (window.location.pathname === path) {
@@ -29,7 +31,7 @@ const Footer = () => {
           
           {/* Logo and Navigation */}
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="cursor-pointer" onClick={() => handleLinkClick('/')}>
+            <div className="cursor-pointer" onClick={() => handleLinkClick(user ? '/dashboard' : '/')}>
               <img 
                 src={logo} 
                 alt="Collixy Logo" 
@@ -67,7 +69,7 @@ const Footer = () => {
                 Features
               </button>
               <button 
-                onClick={() => navigate('/login')}
+                onClick={() => window.location.href = 'mailto:support@collixy.com'}
                 className={`font-medium text-sm md:text-base transition-colors whitespace-nowrap cursor-pointer ${
                   theme === "dark" 
                     ? "text-gray-300 hover:text-white" 

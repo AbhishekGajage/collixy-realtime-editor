@@ -19,8 +19,15 @@ const LoginPage = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const { setUser } = useUser();
+  const { user, setUser } = useUser();
   
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
+
   // Get recent registration data from localStorage
   const recentRegistration = getRegistrationData();
   

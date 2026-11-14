@@ -3,11 +3,20 @@ import { Link, useNavigate } from 'react-router-dom';
 import { register, getGoogleAuthUrl, authAPI } from '../services/api';
 import { storeRegistrationData } from '../utils/storage';
 import { useTheme } from '../Context/useTheme';
+import { useUser } from '../Context/userContext';
 import { GoogleButton, GitHubButton } from '../components/auth/AuthComponents';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { user } = useUser();
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
 
   const [formData, setFormData] = useState({
     username: '',

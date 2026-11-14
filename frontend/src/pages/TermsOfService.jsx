@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import Footer from '../components/common/Footer';
 import { useTheme } from '../Context/useTheme';
+import { useUser } from '../Context/userContext';
 import { 
   FiFileText, 
   FiCheckCircle, 
@@ -14,12 +15,22 @@ import {
   FiCpu, 
   FiClock,
   FiArrowRight,
+  FiArrowLeft,
   FiHelpCircle
 } from 'react-icons/fi';
 
 const TermsOfService = () => {
   const { theme } = useTheme();
+  const { user } = useUser();
   const navigate = useNavigate();
+
+  const handleCTA = () => {
+    if (user) {
+      navigate('/dashboard');
+    } else {
+      navigate('/login');
+    }
+  };
   const isDark = theme === 'dark';
 
   // Scroll to top on mount
@@ -200,7 +211,7 @@ const TermsOfService = () => {
               <p className="text-sm opacity-80">Location: Mumbai, Maharashtra, India</p>
             </div>
             <button
-              onClick={() => navigate('/login')}
+              onClick={() => window.location.href = 'mailto:legal@collixy.com'}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
                 isDark 
                   ? 'bg-blue-600 hover:bg-blue-500 text-white' 
@@ -220,11 +231,23 @@ const TermsOfService = () => {
       isDark ? 'bg-gray-900 text-gray-100' : 'bg-[#EDF1FE] text-gray-800'
     }`}>
       {/* Navbar */}
-      <Navbar onLoginClick={() => navigate('/login')} />
+      <Navbar onLoginClick={() => navigate(user ? '/dashboard' : '/login')} />
 
       {/* Main Content */}
       <main className="grow pt-32 sm:pt-36 md:pt-40 pb-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 md:px-10 lg:px-12">
+          {/* Back to Dashboard Button */}
+          <div className="mb-6">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className={`inline-flex items-center gap-2 text-sm font-medium transition-colors cursor-pointer ${
+                isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FiArrowLeft className="w-4 h-4" />
+              <span>Back to Dashboard</span>
+            </button>
+          </div>
           
           {/* Header Banner */}
           <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
@@ -321,21 +344,11 @@ const TermsOfService = () => {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
-                onClick={() => navigate('/login')}
+                onClick={handleCTA}
                 className="w-full sm:w-auto px-6 py-3 rounded-xl font-semibold text-white bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-500/25 transition-all hover:scale-105 cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>Start Coding Now</span>
+                <span>{user ? 'Go to Dashboard' : 'Get Started Now'}</span>
                 <FiArrowRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => navigate('/')}
-                className={`w-full sm:w-auto px-6 py-3 rounded-xl font-semibold transition-all cursor-pointer border ${
-                  isDark 
-                    ? 'border-white/20 hover:bg-white/10 text-white' 
-                    : 'border-gray-300 hover:bg-white text-gray-800'
-                }`}
-              >
-                Back to Home
               </button>
             </div>
           </div>
