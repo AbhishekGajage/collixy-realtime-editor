@@ -256,7 +256,11 @@ const RegisterPage = () => {
         {/* Floating Close Button */}
         <button
           onClick={() => navigate('/login')}
-          className="cursor-pointer absolute top-3.5 right-3.5 sm:top-4 sm:right-4 z-20 p-2 text-gray-400 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white bg-white/80 dark:bg-gray-850/80 backdrop-blur-md rounded-full border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-750 transition-all shadow-sm"
+          className={`cursor-pointer absolute top-3.5 right-3.5 sm:top-4 sm:right-4 z-20 p-2 rounded-full border transition-all shadow-sm backdrop-blur-md ${
+            theme === 'dark'
+              ? 'bg-gray-800/90 hover:bg-gray-700 text-gray-300 hover:text-white border-gray-700 hover:border-gray-600'
+              : 'bg-gray-100/90 hover:bg-gray-200 text-gray-600 hover:text-gray-900 border-gray-300/80 hover:border-gray-400'
+          }`}
           title="Close (Esc)"
         >
           <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
