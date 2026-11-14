@@ -39,6 +39,10 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
             $or: [{ githubId }, { email: email.toLowerCase() }],
           });
 
+          const firstName = profile.displayName 
+            ? profile.displayName.trim().split(/\s+/)[0] 
+            : (profile.username ? profile.username.trim().split(/\s+/)[0] : '');
+
           if (user) {
             console.log('✅ Existing user found:', user.email);
 
@@ -50,24 +54,36 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
             if (!user.githubId) updateData.githubId = githubId;
             if (avatar && !user.avatar) updateData.avatar = avatar;
 
+            // Set displayName to actual first name from GitHub account
+            if (firstName) {
+              updateData.displayName = firstName;
+            }
+
+            // If user was created via OAuth (or current username was derived from email prefix or github handle), update to first name
+            const emailPrefix = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+            const currentUsernameLower = (user.username || '').toLowerCase();
+            if (firstName && (!user.password || currentUsernameLower.startsWith(emailPrefix) || currentUsernameLower.includes('@') || currentUsernameLower === (profile.username || '').toLowerCase())) {
+              const newUsername = await User.generateUsernameFromName(firstName, email, user._id);
+              if (newUsername && newUsername !== user.username) {
+                updateData.username = newUsername;
+                console.log(`🔄 Updated GitHub username from "${user.username}" to first name: "${newUsername}"`);
+              }
+            }
+
             await User.updateOne({ _id: user._id }, { $set: updateData });
             user = await User.findById(user._id);
           } else {
             console.log('🆕 Creating new user from GitHub...');
 
-            // Generate a unique username
-            let username = profile.username || displayName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-            username = username.substring(0, 25);
-            let counter = 1;
-            while (await User.findOne({ username })) {
-              username = `${username.substring(0, 22)}${counter}`;
-              counter++;
-            }
+            // Generate a unique username from first name
+            const username = await User.generateUsernameFromName(firstName, email);
+            console.log('Generated first-name username for GitHub:', username);
 
             const result = await User.create(
               [
                 {
                   username,
+                  displayName: firstName || displayName || profile.username,
                   email: email.toLowerCase(),
                   githubId,
                   avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,

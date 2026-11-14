@@ -254,7 +254,7 @@ const Dashboard = () => {
                 : 'bg-linear-to-r from-blue-600 via-purple-600 to-blue-600'
               }
             `}>
-              {isNewUser ? `Welcome to Collixy, ${user.username}!` : `Welcome back, ${user.username}!`}
+              {isNewUser ? `Welcome to Collixy, ${user.displayName || user.username}!` : `Welcome back, ${user.displayName || user.username}!`}
             </h1>
             
             <p className={`

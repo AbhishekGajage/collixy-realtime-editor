@@ -47,6 +47,7 @@ const sendTokenResponse = (user, statusCode, res,isNewUser = false) => {
         user: {
           id: user._id,
           username: user.username,
+          displayName: user.displayName || '',
           email: user.email,
           avatar: user.avatar,
           settings: user.settings,
@@ -224,7 +225,8 @@ exports.googleCallback = async (req, res) => {
       );
     }
 
-    const { sub: googleId, email, name, picture } = payload;
+    const { sub: googleId, email, name, picture, given_name } = payload;
+    const firstName = given_name || (name ? name.trim().split(/\s+/)[0] : '');
 
     if (!email) {
       console.error("❌ No email in Google payload");
@@ -259,6 +261,24 @@ exports.googleCallback = async (req, res) => {
         if (picture) {
           updateData.avatar = picture;
         }
+
+        // Set displayName to actual first name from Google account
+        if (firstName) {
+          updateData.displayName = firstName;
+        } else if (name) {
+          updateData.displayName = name.trim().split(/\s+/)[0];
+        }
+
+        // If user was created via Google/OAuth or username was derived from email, update to first name
+        const emailPrefix = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+        const currentUsernameLower = (user.username || '').toLowerCase();
+        if (firstName && (!user.password || currentUsernameLower.startsWith(emailPrefix) || currentUsernameLower.includes('@'))) {
+          const newUsername = await User.generateUsernameFromName(firstName, email, user._id);
+          if (newUsername && newUsername !== user.username) {
+            updateData.username = newUsername;
+            console.log(`🔄 Updated username from "${user.username}" to first name: "${newUsername}"`);
+          }
+        }
         
         // Use updateOne to avoid middleware issues
         await User.updateOne(
@@ -275,13 +295,14 @@ exports.googleCallback = async (req, res) => {
       } else {
         console.log("🆕 Creating new user...");
         
-        // Generate username using the static method
-        const username = await User.generateUsernameFromEmail(email);
-        console.log("Generated username:", username);
+        // Generate username using first name
+        const username = await User.generateUsernameFromName(firstName, email);
+        console.log("Generated first-name username:", username);
 
         // Create new user - NO middleware will interfere
         const newUserData = {
           username: username,
+          displayName: firstName || (name ? name.trim().split(/\s+/)[0] : username),
           email: email.toLowerCase(),
           googleId: googleId,
           avatar: picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
@@ -592,6 +613,7 @@ exports.getMe = async (req, res) => {
         id: user._id,
         _id: user._id,
         username: user.username,
+        displayName: user.displayName || '',
         email: user.email,
         avatar: user.avatar,
         settings: user.settings,
@@ -668,6 +690,7 @@ exports.getAuthStatus = async (req, res) => {
         user: {
           id: user._id,
           username: user.username,
+          displayName: user.displayName || '',
           email: user.email,
           avatar: user.avatar,
         },

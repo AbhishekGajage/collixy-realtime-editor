@@ -103,7 +103,7 @@ const Navbar = ({ onLoginClick }) => {
   };
 
   const avatarUrl = getAvatarUrl();
-  const initial = user?.username ? user.username.charAt(0).toUpperCase() : 'U';
+  const initial = (user?.displayName || user?.username) ? (user.displayName || user.username).charAt(0).toUpperCase() : 'U';
   const colors = [
     'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
     'bg-red-500', 'bg-yellow-500', 'bg-indigo-500', 'bg-teal-500'
@@ -161,7 +161,7 @@ const Navbar = ({ onLoginClick }) => {
               >
                 <div className="text-right hidden sm:block max-w-37.5">
                   <p className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
-                    {user.username || 'User'}
+                    {user.displayName || user.username || 'User'}
                   </p>
                   <p className={`text-sm truncate ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
                     {user.email || ''}
@@ -173,7 +173,7 @@ const Navbar = ({ onLoginClick }) => {
                     {avatarUrl && !avatarError ? (
                       <img
                         src={avatarUrl}
-                        alt={user.username || 'User'}
+                        alt={user.displayName || user.username || 'User'}
                         className="w-full h-full object-cover cursor-pointer"
                         referrerPolicy="no-referrer"
                         crossOrigin="anonymous"
@@ -198,7 +198,7 @@ const Navbar = ({ onLoginClick }) => {
                     : 'bg-white/95 border-black/5 text-gray-800 backdrop-blur-2xl shadow-blue-500/10'
                 }`}>
                   <div className="px-4 py-3 border-b border-gray-200/20">
-                    <p className="font-semibold text-sm truncate">{user.username}</p>
+                    <p className="font-semibold text-sm truncate">{user.displayName || user.username}</p>
                     <p className="text-xs opacity-70 truncate">{user.email}</p>
                   </div>
 
@@ -326,7 +326,7 @@ const Navbar = ({ onLoginClick }) => {
                   {avatarUrl && !avatarError ? (
                     <img 
                       src={avatarUrl} 
-                      alt={user.username || 'User'} 
+                      alt={user.displayName || user.username || 'User'} 
                       className="w-full h-full object-cover" 
                       referrerPolicy="no-referrer"
                       crossOrigin="anonymous"
@@ -340,7 +340,7 @@ const Navbar = ({ onLoginClick }) => {
                   )}
                 </div>
                 <div className="truncate">
-                  <p className="font-semibold text-sm truncate">{user.username}</p>
+                  <p className="font-semibold text-sm truncate">{user.displayName || user.username}</p>
                   <p className="text-xs opacity-70 truncate">{user.email}</p>
                 </div>
               </div>

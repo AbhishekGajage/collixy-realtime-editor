@@ -38,6 +38,12 @@ const userSchema = new mongoose.Schema({
     maxlength: [200, 'Bio cannot exceed 200 characters'],
     default: ''
   },
+  displayName: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'Display name cannot exceed 50 characters'],
+    default: ''
+  },
   
   // Social login IDs
   googleId: {
@@ -274,6 +280,40 @@ userSchema.statics.generateUsernameFromEmail = async function(email) {
     counter++;
   }
   
+  return username;
+};
+
+// Helper to generate username from display name / first name (preferred for OAuth)
+userSchema.statics.generateUsernameFromName = async function(name, fallbackEmail, excludeUserId = null) {
+  let baseUsername;
+  if (name && name.trim()) {
+    // Take just the first name (before any space), sanitize for username rules
+    let firstName = name.trim().split(/\s+/)[0];
+    firstName = firstName.replace(/[^a-zA-Z0-9_]/g, '').substring(0, 25);
+    if (firstName) {
+      baseUsername = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+    }
+  }
+
+  // If the name produced an empty or too-short result, fall back to email
+  if (!baseUsername || baseUsername.length < 3) {
+    if (fallbackEmail) {
+      baseUsername = fallbackEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 25);
+    } else {
+      baseUsername = 'user_' + Date.now().toString(36);
+    }
+  }
+
+  let username = baseUsername;
+  let counter = 1;
+
+  const query = (u) => excludeUserId ? { username: u, _id: { $ne: excludeUserId } } : { username: u };
+
+  while (await this.findOne(query(username))) {
+    username = baseUsername.substring(0, 22) + counter;
+    counter++;
+  }
+
   return username;
 };
 
